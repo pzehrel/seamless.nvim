@@ -200,10 +200,9 @@ function M.mount(uri)
 
     notify.debug("sshfs mount: " .. table.concat(args, " "))
 
-    -- Show connecting indicator — blocking jobwait prevents normal redraw
-    if sshpass_cmd then
-      notify.connecting(key)
-    end
+    -- Show connecting indicator for every new mount — NFS may need
+    -- time to become accessible even after sshfs exits.
+    notify.connecting(key)
 
     -- Run sshfs with a timeout (sshfs daemonizes on success, so the parent
     -- process exits quickly after establishing the mount).
@@ -283,7 +282,6 @@ function M.mount(uri)
 
   mount_in_progress[key] = nil
 
-  notify.connected(key)
   return mount_path
 end
 
