@@ -8,7 +8,6 @@
 local config = require("seamless.config")
 local uri = require("seamless.uri")
 local mount = require("seamless.mount")
-local path = require("seamless.path")
 local notify = require("seamless.notify")
 
 local M = {}
