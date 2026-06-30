@@ -18,9 +18,20 @@
 
 ### System dependencies
 
-| OS | Command |
-|----|---------|
-| macOS | `brew install --cask macfuse && brew install sshfs` |
+**macOS:**
+```bash
+brew tap macos-fuse-t/cask
+brew install fuse-t           # 可能需要 sudo + 系统偏好设置中允许
+brew trust macos-fuse-t/cask  # 信任 tap（否则 sshfs 安装被拒）
+brew install fuse-t-sshfs
+```
+
+> **注意 macOS 27+**：自带的 macFUSE 5.2.0 不兼容此系统版本。fuse-t 是纯用户态替代，无需内核扩展。
+
+**Linux:**
+
+| 发行版 | 命令 |
+|--------|------|
 | Debian/Ubuntu | `sudo apt install sshfs` |
 | Arch | `sudo pacman -S sshfs` |
 
@@ -109,7 +120,7 @@ require("seamless").setup({
 :checkhealth seamless
 ```
 
-Checks: `ssh`, `sshfs`, unmount utilities, `$SSH_AUTH_SOCK`, `~/.ssh/config`, macFUSE (macOS), mount cache directory, Neovim version.
+Checks: `ssh`, `sshfs`, unmount utilities, `$SSH_AUTH_SOCK`, `~/.ssh/config`, FUSE (fuse-t on macOS, kernel on Linux), mount cache directory, Neovim version.
 
 ## ❓ FAQ
 
@@ -168,7 +179,7 @@ nvim scp://myserver//etc/nginx/nginx.conf
 
 Inspired by [remote-sshfs.nvim](https://github.com/nixrajput/remote-sshfs.nvim) and the countless hours spent fighting netrw.
 
-Built on the shoulders of [sshfs/libfuse](https://github.com/libfuse/sshfs) and [macFUSE](https://macfuse.io/).
+Built on the shoulders of [sshfs/libfuse](https://github.com/libfuse/sshfs) and [fuse-t](https://github.com/macos-fuse-t/fuse-t).
 
 ## 📜 License
 

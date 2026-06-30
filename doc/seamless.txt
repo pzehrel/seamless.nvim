@@ -167,7 +167,11 @@ Plugin dep:    plenary.nvim
 
 System deps (client only — nothing required on the remote server):
 
-  macOS:   `brew install --cask macfuse && brew install sshfs`
+  macOS:
+    brew tap macos-fuse-t/cask
+    brew install fuse-t fuse-t-sshfs
+    (If brew refuses the tap: `brew trust macos-fuse-t/cask`)
+
   Debian:  `sudo apt install sshfs`
   Arch:    `sudo pacman -S sshfs`
 
@@ -181,7 +185,7 @@ Run `:checkhealth seamless` to verify:
   - SSH agent ($SSH_AUTH_SOCK)
   - ~/.ssh/config presence
   - Mount cache directory
-  - macFUSE (macOS only)
+  - FUSE (macOS: fuse-t, Linux: kernel /dev/fuse)
   - Neovim version compatibility
 
 ==============================================================================

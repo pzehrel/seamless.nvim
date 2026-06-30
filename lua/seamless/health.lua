@@ -23,7 +23,7 @@ function M.check()
     vim.health.error(
       "sshfs not found in $PATH",
       {
-        "macOS:  brew install --cask macfuse && brew install sshfs",
+        "macOS:  brew tap macos-fuse-t/cask && brew install fuse-t fuse-t-sshfs",
         "Debian: sudo apt install sshfs",
         "Arch:   sudo pacman -S sshfs",
       }
@@ -66,25 +66,35 @@ function M.check()
     vim.health.info("Mount cache directory will be created at: " .. mount_base)
   end
 
-  -- 7. macOS-specific: check for macFUSE
+  -- 7. Platform-specific FUSE check
   if vim.fn.has("mac") == 1 or vim.fn.has("macunix") == 1 then
-    local macfuse_paths = {
-      "/Library/Filesystems/macfuse.fs",
-      "/usr/local/lib/libfuse.2.dylib",
-      "/opt/homebrew/lib/libfuse.2.dylib",
+    -- macOS: fuse-t (userspace, no kernel extension needed)
+    local fuse_paths = {
+      "/usr/local/lib/libfuse-t.dylib",
+      "/opt/homebrew/lib/libfuse-t.dylib",
     }
     local found = false
-    for _, p in ipairs(macfuse_paths) do
-      if vim.fn.filereadable(p) == 1 or vim.fn.isdirectory(p) == 1 then
-        vim.health.ok("macFUSE: " .. p)
+    for _, p in ipairs(fuse_paths) do
+      if vim.fn.filereadable(p) == 1 then
+        vim.health.ok("fuse-t: " .. p)
         found = true
         break
       end
     end
     if not found then
       vim.health.warn(
-        "macFUSE may not be installed — sshfs requires it on macOS",
-        { "Install: brew install --cask macfuse" }
+        "fuse-t not found — sshfs requires a FUSE implementation on macOS",
+        { "Install: brew tap macos-fuse-t/cask && brew install fuse-t fuse-t-sshfs" }
+      )
+    end
+  elseif vim.fn.has("linux") == 1 then
+    -- Linux: kernel FUSE
+    if vim.fn.filereadable("/dev/fuse") == 1 then
+      vim.health.ok("FUSE: /dev/fuse (kernel)")
+    else
+      vim.health.warn(
+        "/dev/fuse not found — kernel FUSE may not be available",
+        { "Check: modprobe fuse" }
       )
     end
   end
