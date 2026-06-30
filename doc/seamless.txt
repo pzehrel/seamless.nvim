@@ -1,0 +1,215 @@
+*seamless.nvim.txt*	Edit remote files as if they were local, via SSHFS.
+
+Author:   pzehrel
+License:  MIT
+Version:  0.1.0
+
+==============================================================================
+CONTENTS                                                  *seamless-contents*
+
+  1. Introduction ....................... |seamless-intro|
+  2. Installation ....................... |seamless-install|
+  3. Usage .............................. |seamless-usage|
+  4. Commands ........................... |seamless-commands|
+  5. Configuration ...................... |seamless-config|
+  6. Authentication ..................... |seamless-auth|
+  7. Requirements ....................... |seamless-requirements|
+  8. Health Check ....................... |seamless-health|
+  9. FAQ ................................ |seamless-faq|
+
+==============================================================================
+1. INTRODUCTION                                           *seamless-intro*
+
+seamless.nvim intercepts `scp://` and `sftp://` URIs, automatically mounts
+the remote directory via sshfs, and opens the file in a local buffer. When
+you're done editing, it unmounts cleanly.
+
+Key design principles:
+  - Path-first: `nvim scp://myserver//etc/hosts` just works
+  - Transparent: edit, save, browse — everything goes through the local mount
+  - Zero remote footprint: nothing installed on the server
+  - Plays well with others: nvim-tree, neo-tree, oil.nvim all work natively
+
+==============================================================================
+2. INSTALLATION                                           *seamless-install*
+
+Using lazy.nvim: >
+    {
+      "pzehrel/seamless.nvim",
+      lazy = false,   -- IMPORTANT: must load at startup
+      dependencies = {
+        "nvim-lua/plenary.nvim",
+      },
+      opts = {
+        -- your overrides here
+      },
+    }
+
+IMPORTANT: `lazy = false` is required because seamless.nvim registers
+|BufReadCmd| autocmds that must be in place before any `scp://` URI is
+opened. Using `event = "BufReadCmd"` or `VeryLazy` will miss the
+interception window.
+
+==============================================================================
+3. USAGE                                                   *seamless-usage*
+
+Open a remote file: >
+    nvim scp://myserver//etc/nginx/nginx.conf
+    nvim sftp://user@devbox//var/www/index.html
+    nvim scp://myserver:2222//home/user/.bashrc
+
+The `//` after the hostname indicates an absolute path on the remote.
+seamless.nvim will:
+  1. Parse the URI
+  2. Run a preflight SSH check (if enabled)
+  3. Mount via sshfs to `~/.cache/nvim/seamless/<host>/`
+  4. Open the file as a local buffer
+
+When you close the last buffer for a host (or exit Neovim), the mount
+is automatically cleaned up.
+
+==============================================================================
+4. COMMANDS                                               *seamless-commands*
+
+:SeamlessConnect {host}:{path}       *:SeamlessConnect*
+    Manually connect to a remote host and open a path.
+    Example: `:SeamlessConnect myserver:/var/www`
+
+:SeamlessDisconnect {host}           *:SeamlessDisconnect*
+    Manually unmount a host.
+    Example: `:SeamlessDisconnect myserver`
+
+:SeamlessStatus                      *:SeamlessStatus*
+    Show active mounts and their reference counts.
+
+==============================================================================
+5. CONFIGURATION                                         *seamless-config*
+
+Default configuration: >
+
+  require("seamless").setup({
+    -- Base directory for sshfs mount points
+    mount_base = vim.fn.stdpath("cache") .. "/seamless",
+
+    -- Protocols to intercept
+    protocols = { "scp", "sftp" },
+
+    -- Auto-unmount strategies
+    unmount = {
+      on_exit = true,             -- Unmount all on VimLeavePre
+      on_idle = nil,              -- Unmount after N seconds of idleness (nil = disabled)
+      on_buffer_orphan = true,    -- Unmount when last buffer for a host is closed
+    },
+
+    -- Arguments passed directly to sshfs
+    sshfs_args = {
+      "-o", "reconnect",
+      "-o", "ConnectTimeout=5",
+      "-o", "ServerAliveInterval=15",
+    },
+
+    -- Notification preferences
+    notify = {
+      on_connect = true,          -- Notify when mount succeeds
+      on_disconnect = false,      -- Notify when unmounting (noisy, off by default)
+      on_error = true,            -- Notify on connection failures
+    },
+
+    -- SSH connection settings
+    ssh = {
+      binary = "ssh",
+      preflight_check = true,                -- Test connectivity before mounting
+      preflight_timeout = 5,                 -- Seconds before preflight times out
+      force_mount_on_preflight_fail = false, -- Force mount even if preflight fails
+    },
+
+    sshfs_binary = "sshfs",
+
+    -- Log level: "debug" | "info" | "warn" | "error"
+    log_level = "warn",
+  })
+
+==============================================================================
+6. AUTHENTICATION                                          *seamless-auth*
+
+seamless.nvim is a mount manager, not a credential manager. All
+authentication is delegated to SSH/sshfs.
+
+ZERO-CONFIG (works out of the box)                     *seamless-auth-key*
+  - SSH keys in ~/.ssh/id_*
+  - SSH agent ($SSH_AUTH_SOCK)
+  - ~/.ssh/config host entries
+  - GSSAPI/Kerberos tickets
+
+ONE-TIME SETUP (configure once)                       *seamless-auth-config*
+  - Custom key paths: add to `sshfs_args`:
+    `"-o", "IdentityFile=~/.ssh/mykey"`
+  - Host key verification: run `ssh <host>` once to accept, or add:
+    `"-o", "StrictHostKeyChecking=accept-new"`
+  - ProxyJump/bastion: configure in ~/.ssh/config (transparent to sshfs)
+
+PASSWORD / MFA (needs external tools)                 *seamless-auth-password*
+  - Use `sshpass` with a wrapper script, configured via sshfs_args
+  - Or use SSH ControlMaster to pre-authenticate once, then let sshfs
+    reuse the connection
+
+seamless.nvim will NEVER:
+  - Store your passwords
+  - Provide a password input UI
+  - Bypass host key verification by default
+  - Read your private key contents
+
+==============================================================================
+7. REQUIREMENTS                                       *seamless-requirements*
+
+Neovim:        >= 0.9.0
+Plugin dep:    plenary.nvim
+
+System deps (client only — nothing required on the remote server):
+
+  macOS:   `brew install --cask macfuse && brew install sshfs`
+  Debian:  `sudo apt install sshfs`
+  Arch:    `sudo pacman -S sshfs`
+
+==============================================================================
+8. HEALTH CHECK                                          *seamless-health*
+
+Run `:checkhealth seamless` to verify:
+  - ssh binary and version
+  - sshfs binary and version
+  - unmount utility (fusermount or umount)
+  - SSH agent ($SSH_AUTH_SOCK)
+  - ~/.ssh/config presence
+  - Mount cache directory
+  - macFUSE (macOS only)
+  - Neovim version compatibility
+
+==============================================================================
+9. FAQ                                                       *seamless-faq*
+
+Q: Why `lazy = false`?                                  *seamless-faq-lazy*
+A: The plugin registers BufReadCmd autocmds that must exist before any
+   `scp://` URI is opened. lazy-loading on events means the autocmd
+   isn't registered in time, and netrw tries (and fails) to handle it.
+
+Q: Does this work with nvim-tree / neo-tree / oil.nvim?   *seamless-faq-tree*
+A: Yes! After mounting, the remote files are local files. Any file
+   explorer sees them natively.
+
+Q: What if sshfs is not installed?                      *seamless-faq-no-sshfs*
+A: The plugin catches this during preflight and shows a clear error
+   with installation instructions.
+
+Q: Can I use this with password-protected servers?        *seamless-faq-pass*
+A: Yes, indirectly. Use SSH ControlMaster to pre-authenticate (ssh -M),
+   or wrap sshfs with sshpass. See |seamless-auth-password|.
+
+Q: Does the remote server need anything installed?     *seamless-faq-remote*
+A: No. sshfs works over standard SSH. The remote server only needs
+   an SSH server.
+
+Q: What about Windows?                                 *seamless-faq-windows*
+A: Windows support is not planned due to the immature sshfs ecosystem.
+   WSL may work as an alternative but is unsupported.
+
+ vim:tw=78:ts=8:ft=help:norl:

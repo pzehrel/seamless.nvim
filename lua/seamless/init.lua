@@ -1,0 +1,279 @@
+---seamless.nvim — Edit remote files as if they were local, via SSHFS.
+---
+---Usage:
+---  require("seamless").setup({})  -- uses defaults
+---
+---  nvim scp://myserver//etc/nginx/nginx.conf
+
+local config = require("seamless.config")
+local uri = require("seamless.uri")
+local mount = require("seamless.mount")
+local path = require("seamless.path")
+local notify = require("seamless.notify")
+
+local M = {}
+
+---@type seamless.Config
+local opts = {}
+
+---Autocmd group name.
+local AUGROUP = "SeamlessNvim"
+
+---Map of buffer number → host, for tracking refcounts.
+---@type table<integer, string>
+local buffer_hosts = {}
+
+---Main setup. Must be called before opening scp:// URIs.
+---@param user_opts? table
+function M.setup(user_opts)
+  opts = config.merge(user_opts)
+
+  -- Propagate config to sub-modules
+  mount.setup(opts)
+  notify.setup(opts)
+  M._set_log_level()
+
+  -- Clean up stale mounts from crashed sessions
+  mount.cleanup_stale()
+
+  -- Create augroup
+  local augroup = vim.api.nvim_create_augroup(AUGROUP, { clear = true })
+
+  -- Register BufReadCmd for each protocol
+  for _, proto in ipairs(opts.protocols) do
+    vim.api.nvim_create_autocmd("BufReadCmd", {
+      group = augroup,
+      pattern = proto .. "://*",
+      callback = function(args)
+        -- args.file contains the actual URI (e.g. "scp://myserver//etc/hosts")
+        -- args.match contains the pattern that matched (e.g. "scp://*")
+        M._handle_remote_uri(args.file)
+      end,
+      desc = "seamless: handle " .. proto .. ":// URIs",
+    })
+  end
+
+  -- Cleanup hooks
+  if opts.unmount.on_exit then
+    vim.api.nvim_create_autocmd("VimLeavePre", {
+      group = augroup,
+      callback = function()
+        mount.unmount_all()
+      end,
+      desc = "seamless: unmount all on exit",
+    })
+  end
+
+  -- Track buffer focus for idle timer
+  vim.api.nvim_create_autocmd("BufEnter", {
+    group = augroup,
+    pattern = "*",
+    callback = function(args)
+      local host = buffer_hosts[args.buf]
+      if host then
+        mount.track_activity(host)
+      end
+    end,
+    desc = "seamless: track buffer activity for idle unmount",
+  })
+
+  -- Start idle unmount timer if configured
+  if opts.unmount.on_idle then
+    mount.start_idle_timer()
+  end
+
+  -- Track buffer wipe to decrement refcount
+  vim.api.nvim_create_autocmd("BufWipeout", {
+    group = augroup,
+    pattern = "*",
+    callback = function(args)
+      local buf = args.buf
+      local host = buffer_hosts[buf]
+      if host then
+        buffer_hosts[buf] = nil
+        mount.ref_dec(host)
+      end
+    end,
+    desc = "seamless: release mount on buffer wipe",
+  })
+
+  -- User commands
+  vim.api.nvim_create_user_command("SeamlessConnect", function(cmd_args)
+    M._cmd_connect(cmd_args.args)
+  end, {
+    nargs = 1,
+    desc = "Manually connect to a remote host (e.g. :SeamlessConnect myserver:/var/www)",
+    complete = "file",
+  })
+
+  vim.api.nvim_create_user_command("SeamlessDisconnect", function(cmd_args)
+    local host = cmd_args.args
+    if host == "" then
+      vim.notify("Usage: SeamlessDisconnect <host>", vim.log.levels.WARN)
+      return
+    end
+    mount.unmount(host)
+    -- Clean up buffer_hosts entries for this host so stale refcounts
+    -- are not later decremented when those buffers are wiped.
+    for buf, h in pairs(buffer_hosts) do
+      if h == host then
+        buffer_hosts[buf] = nil
+      end
+    end
+  end, {
+    nargs = 1,
+    desc = "Manually disconnect a remote host",
+  })
+
+  vim.api.nvim_create_user_command("SeamlessStatus", function()
+    M._cmd_status()
+  end, {
+    desc = "Show current mount status",
+  })
+
+  notify.debug("seamless.nvim setup complete")
+end
+
+---Handle a remote URI when BufReadCmd fires.
+---This is the core entry point — called automatically when a scp:// or sftp://
+---buffer is opened.
+---
+---@param raw_uri string The original URI (e.g. "scp://myserver//etc/hostname")
+function M._handle_remote_uri(raw_uri)
+  notify.debug("handle_remote_uri: " .. raw_uri)
+
+  -- 1. Parse URI
+  local parsed, err = uri.parse(raw_uri)
+  if not parsed then
+    notify.error("Failed to parse URI: " .. (err or "unknown error"))
+    return
+  end
+
+  local key = uri.host_key(parsed)
+
+  -- 2. Mount (or reuse existing)
+  local mount_path, mount_err = mount.mount(parsed)
+  if not mount_path then
+    notify.error("Failed to mount " .. parsed.host .. ": " .. (mount_err or "unknown error"))
+    return
+  end
+
+  -- 3. Convert remote path to local
+  local local_path = path.remote_to_local(parsed, mount_path)
+  path.ensure_parent_dir(local_path)
+
+  notify.debug("local path: " .. local_path)
+
+  -- 4. Read file into current buffer
+  local current_buf = vim.api.nvim_get_current_buf()
+
+  -- Check if the file exists locally (it should, since sshfs mounted it)
+  local stat = vim.loop.fs_stat(local_path)
+
+  if stat and stat.type == "directory" then
+    -- It's a directory — set as a directory buffer so file explorers can use it
+    local ok, dir_err = pcall(function()
+      vim.api.nvim_buf_set_name(current_buf, local_path)
+      vim.api.nvim_buf_set_option(current_buf, "buftype", "")
+      -- Let the file explorer or netrw take over for directory browsing
+      vim.cmd("edit " .. vim.fn.fnameescape(local_path))
+    end)
+    if not ok then
+      notify.error("Failed to set up directory buffer: " .. tostring(dir_err))
+      mount.ref_dec(key)
+      return
+    end
+    -- :edit may replace the current buffer; track whichever is now current
+    local dir_buf = vim.api.nvim_get_current_buf()
+    buffer_hosts[dir_buf] = key
+    return
+  end
+
+  -- 5. Set up buffer for file (existing or new)
+  local buf_ok, buf_err = pcall(function()
+    if stat and stat.type == "file" then
+      -- Read file content into buffer (vim.fn.readfile handles binary safely)
+      local lines = vim.fn.readfile(local_path)
+      vim.api.nvim_buf_set_lines(current_buf, 0, -1, false, lines)
+      vim.api.nvim_buf_set_option(current_buf, "modified", false)
+    else
+      -- File doesn't exist yet — create empty buffer at that path
+      -- (sshfs will create it on :w)
+      vim.api.nvim_buf_set_lines(current_buf, 0, -1, false, {})
+      vim.api.nvim_buf_set_option(current_buf, "modified", false)
+    end
+
+    -- Set buffer name to the local path (so :w writes back through sshfs)
+    vim.api.nvim_buf_set_name(current_buf, local_path)
+    vim.api.nvim_buf_set_option(current_buf, "buftype", "")
+
+    -- Track buffer → host mapping for refcount
+    buffer_hosts[current_buf] = key
+
+    -- Set filetype based on extension
+    vim.api.nvim_buf_call(current_buf, function()
+      vim.cmd("filetype detect")
+    end)
+  end)
+
+  if not buf_ok then
+    notify.error("Failed to set up buffer: " .. tostring(buf_err))
+    mount.ref_dec(key)
+  end
+end
+
+---Handler for :SeamlessConnect <host>:/path
+---@param arg string e.g. "myserver:/etc/nginx"
+function M._cmd_connect(arg)
+  -- Normalize: accept "host:/path" or "host " without scheme
+  if not arg:match("://") then
+    arg = "scp://" .. arg
+  end
+  M._handle_remote_uri(arg)
+end
+
+---Handler for :SeamlessStatus
+function M._cmd_status()
+  local mounts = mount.status()
+  if vim.tbl_isempty(mounts) then
+    vim.notify("No active remote mounts.", vim.log.levels.INFO)
+    return
+  end
+
+  local lines = { "# seamless.nvim — Active Mounts" }
+  for _, m in ipairs(mounts) do
+    table.insert(lines, "")
+    table.insert(lines, "## " .. m.host)
+    table.insert(lines, "  Mount path: " .. m.mount_path)
+    table.insert(lines, "  Refcount:   " .. m.refcount)
+  end
+
+  -- Show in a new scratch buffer
+  local buf = vim.api.nvim_create_buf(false, true)
+  vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
+  vim.api.nvim_buf_set_option(buf, "buftype", "nofile")
+  vim.api.nvim_buf_set_option(buf, "filetype", "markdown")
+  vim.api.nvim_buf_set_option(buf, "modifiable", false)
+  vim.api.nvim_set_current_buf(buf)
+end
+
+---Set log level from config.
+function M._set_log_level()
+  vim.g.seamless_log_level = opts.log_level or "warn"
+end
+
+---Expose parsed URI for Lua callers who want to do custom handling.
+---@param raw_uri string
+---@return seamless.Uri|nil
+---@return string|nil error
+function M.parse_uri(raw_uri)
+  return uri.parse(raw_uri)
+end
+
+---Manually handle a remote URI (public entry point).
+---@param raw_uri string
+function M.open(raw_uri)
+  M._handle_remote_uri(raw_uri)
+end
+
+return M

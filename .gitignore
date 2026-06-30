@@ -1,0 +1,38 @@
+# Neovim
+*.swp
+*.swo
+*~
+.netrwhist
+
+# Lua
+luac.out
+lua/*.so
+lua/*.dll
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE / Editor
+.idea/
+.vscode/
+*.sublime-*
+
+# Lazy.nvim / packer / plugin manager artifacts
+lazy-lock.json
+
+# Testing
+tests/.temp/
+tests/output/
+
+# Documentation generated
+doc/tags
+
+# Build artifacts
+*.o
+*.obj
+deps/
+build/
+
+# Plenary test output
+.plenary/
