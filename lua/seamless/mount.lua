@@ -199,11 +199,10 @@ function M.mount(uri)
     env["SSH_ASKPASS"] = askpass
   end
 
-  -- Run sshfs with a timeout to prevent Neovim from freezing when
-  -- authentication requires interactive input (password, host key, etc.).
+  -- Run sshfs with a timeout (sshfs daemonizes on success, so the parent
+  -- process exits quickly after establishing the mount).
   local sshfs_stdout = {}
   local sshfs_stderr = {}
-  local sshfs_done = false
 
   local job_id = vim.fn.jobstart(args, {
     env = env,
@@ -219,9 +218,6 @@ function M.mount(uri)
         for _, line in ipairs(data) do table.insert(sshfs_stderr, line) end
       end
     end,
-    on_exit = function()
-      sshfs_done = true
-    end,
   })
 
   if job_id <= 0 then
@@ -229,23 +225,20 @@ function M.mount(uri)
     return nil, "failed to start sshfs process"
   end
 
-  -- Wait up to 15 seconds for sshfs to complete
-  local wait_ok = vim.wait(15000, function() return sshfs_done end, 100, false)
-  if not wait_ok then
+  -- jobwait handles daemonizing: sshfs parent exits after establishing
+  -- the mount, so jobwait returns with exit code. -1 means timeout.
+  local result = vim.fn.jobwait({ job_id }, 15000)
+  local exit_code = result[1]
+
+  if exit_code == -1 then
+    -- Timeout — sshfs hung (password prompt, network issue, etc.)
     vim.fn.jobstop(job_id)
     mount_in_progress[key] = nil
     return nil, "sshfs timed out after 15s — check authentication"
   end
 
-  -- Collect job result (Neovim 0.9+)
-  local exit_code = 0
-  pcall(function()
-    local info = vim.fn.job_info(job_id)
-    if info then exit_code = info.exit_code end
-  end)
-
-  -- sshfs daemonizes on success (exit code 0), so a non-zero exit
-  -- means something went wrong before daemonization
+  -- sshfs daemonizes on success (exit code 0). Non-zero means it failed
+  -- before daemonizing (bad password, connection refused, etc.).
   if exit_code ~= 0 then
     mount_in_progress[key] = nil
     local err_msg = table.concat(sshfs_stderr, "\n")
