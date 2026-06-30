@@ -18,15 +18,47 @@
 
 ### 系统依赖
 
-**macOS：**
+macOS 支持两种 FUSE 实现：
+
+**方案 A：macFUSE（推荐）**
+
+macFUSE 需要内核扩展。Apple Silicon 机型需先进入恢复模式降低安全策略：
+
+1. 关机，按住电源键进入恢复模式
+2. **实用工具 → 启动安全性实用工具** → 选择磁盘 → **安全策略**
+3. 选择 **降低安全性**，勾选"允许用户管理来自被认可开发者的内核扩展"
+
+然后安装：
+
+```bash
+brew install --cask macfuse
+brew install sshfs
+```
+
+安装后在 **系统设置 → 隐私与安全性** 中点击 macFUSE 内核扩展旁边的"允许"，重启生效。
+
+> macOS 27 需要 **macFUSE ≥ 5.3.1**（预发布版）。Homebrew 当前提供的是
+> 5.2.0 稳定版，暂不支持 macOS 27。如 `brew install --cask macfuse` 安装
+> 了旧版本，请从 [github.com/macfuse/macfuse/releases](https://github.com/macfuse/macfuse/releases)
+> 下载 .pkg 安装。
+
+卸载：`brew uninstall --cask macfuse; brew uninstall sshfs`
+
+**方案 B：fuse-t**
+
+纯用户态方案，无需内核扩展，也无需进入恢复模式或降低安全策略。
+
 ```bash
 brew tap macos-fuse-t/cask
-brew install --cask fuse-t      # 可能需要 sudo + 系统偏好设置中允许
-brew trust macos-fuse-t/cask     # 信任 tap（否则 sshfs 安装被拒）
+brew install --cask fuse-t
+brew trust macos-fuse-t/cask
 brew install --cask fuse-t-sshfs
 ```
 
-> **注意 macOS 27+**：Homebrew 的 macFUSE 5.2.0 不兼容此系统。fuse-t 是纯用户态替代，无需内核扩展。
+> ⚠️ **已知问题**：fuse-t-sshfs 在密码认证下可能静默失败
+> （`short read on fuse device`）。Publickey 认证可正常使用。如需密码认证，请使用 macFUSE。
+
+卸载：`brew uninstall --cask fuse-t fuse-t-sshfs; brew untap macos-fuse-t/cask`
 
 **Linux：**
 

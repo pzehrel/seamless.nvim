@@ -18,15 +18,51 @@
 
 ### System dependencies
 
-**macOS:**
+Two FUSE implementations are supported on macOS:
+
+**Option A: macFUSE (recommended)**
+
+macFUSE requires a kernel extension. On Apple Silicon, you must enable
+reduced security in Recovery Mode **before** installing:
+
+1. Shut down, then hold the power button to enter Recovery Mode
+2. **Utilities → Startup Security Utility** → select your disk → **Security Policy**
+3. Choose **Reduced Security** and enable "Allow user management of kernel extensions"
+
+Then install:
+
+```bash
+brew install --cask macfuse
+brew install sshfs
+```
+
+After installing, open **System Settings → Privacy & Security** and click
+"Allow" next to the macFUSE kernel extension, then restart.
+
+> macOS 27 requires **macFUSE ≥ 5.3.1** (pre-release). Homebrew ships the
+> stable 5.2.0 which doesn't support macOS 27 yet — download the `.pkg` from
+> [github.com/macfuse/macfuse/releases](https://github.com/macfuse/macfuse/releases)
+> if `brew install --cask macfuse` installs an older version.
+
+To uninstall: `brew uninstall --cask macfuse; brew uninstall sshfs`
+
+**Option B: fuse-t**
+
+Pure userspace, no kernel extension — no Recovery Mode or reduced
+security needed.
+
 ```bash
 brew tap macos-fuse-t/cask
-brew install --cask fuse-t      # 可能需要 sudo + 系统偏好设置中允许
-brew trust macos-fuse-t/cask     # 信任 tap（否则 sshfs 安装被拒）
+brew install --cask fuse-t
+brew trust macos-fuse-t/cask
 brew install --cask fuse-t-sshfs
 ```
 
-> **注意 macOS 27+**：自带的 macFUSE 5.2.0 不兼容此系统版本。fuse-t 是纯用户态替代，无需内核扩展。
+> ⚠️ **Known issue**: fuse-t-sshfs may fail silently with password authentication
+> (`short read on fuse device`). Publickey auth works reliably. Use macFUSE if
+> you need password auth.
+>
+> To uninstall: `brew uninstall --cask fuse-t fuse-t-sshfs; brew untap macos-fuse-t/cask`
 
 **Linux:**
 
