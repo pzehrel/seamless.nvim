@@ -172,23 +172,33 @@ function M._handle_remote_uri(raw_uri)
   local local_path = mount_path .. parsed.path
   notify.debug("local path: " .. local_path)
 
-  -- 4. Set buffer name BEFORE :edit so statusline doesn't see a nil name.
-  -- Then :edit handles file content loading and directory browsing.
+  -- 4. Read file content directly (avoid :edit which triggers events
+  -- that may cause NvChad statusline errors with NFS/cwd).
   local current_buf = vim.api.nvim_get_current_buf()
-  vim.bo[current_buf].buftype = ""
-  vim.api.nvim_buf_set_name(current_buf, local_path)
-  vim.cmd("edit " .. vim.fn.fnameescape(local_path))
-
-  local target_buf = vim.api.nvim_get_current_buf()
-  buffer_hosts[target_buf] = key
 
   if vim.fn.isdirectory(local_path) == 1 then
+    -- Directory: set name, cd, and let the user browse
+    vim.bo[current_buf].buftype = ""
+    vim.api.nvim_buf_set_name(current_buf, local_path)
     vim.cmd("cd " .. vim.fn.fnameescape(local_path))
-  else
-    vim.api.nvim_buf_call(target_buf, function()
+  elseif vim.fn.filereadable(local_path) == 1 then
+    -- Existing file: read content directly
+    local lines = vim.fn.readfile(local_path)
+    vim.api.nvim_buf_set_lines(current_buf, 0, -1, false, lines)
+    vim.bo[current_buf].buftype = ""
+    vim.bo[current_buf].modified = false
+    vim.api.nvim_buf_set_name(current_buf, local_path)
+    vim.api.nvim_buf_call(current_buf, function()
       vim.cmd("filetype detect")
     end)
+  else
+    -- New file (doesn't exist on remote yet)
+    vim.bo[current_buf].buftype = ""
+    vim.bo[current_buf].modified = false
+    vim.api.nvim_buf_set_name(current_buf, local_path)
   end
+
+  buffer_hosts[current_buf] = key
 end
 
 ---Handler for :SeamlessConnect <host>:/path
