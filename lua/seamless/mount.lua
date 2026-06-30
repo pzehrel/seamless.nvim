@@ -286,7 +286,6 @@ function M.mount(uri)
 
   mount_in_progress[key] = nil
 
-  notify.connected(key)
   return mount_path
 end
 

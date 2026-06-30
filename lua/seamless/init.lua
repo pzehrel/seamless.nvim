@@ -174,7 +174,27 @@ function M._handle_remote_uri(raw_uri)
   local local_path = mount_path .. parsed.path
   notify.debug("local path: " .. local_path)
 
-  -- 4. Read file content directly (avoid :edit which triggers events
+  -- 4. Wait for the specific path to become readable. The mount table
+  -- confirms the mount exists, but the remote directory listing may not
+  -- be ready yet (SSHFS needs a moment to establish the SFTP session).
+  local path_ready = vim.wait(5000, function()
+    return vim.fn.isdirectory(local_path) == 1
+      or vim.fn.filereadable(local_path) == 1
+  end, 50, false)
+
+  if not path_ready then
+    mount.ref_dec(key)
+    notify.error("Path not accessible on " .. key .. " — mount exists but path is not yet readable. Try reopening.")
+    return
+  end
+
+  -- Notify connected now that both mount and path are confirmed ready.
+  local mnt = mount.get(key)
+  if mnt and mnt.refcount == 1 then
+    notify.connected(key)
+  end
+
+  -- 5. Read file content directly (avoid :edit which triggers events
   -- that may cause NvChad statusline errors with NFS/cwd).
   local current_buf = vim.api.nvim_get_current_buf()
 
