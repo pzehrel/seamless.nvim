@@ -131,13 +131,30 @@ function M.mount(uri)
   -- Mark as in progress — subsequent concurrent callers will wait above
   mount_in_progress[key] = true
 
-  -- Preflight check: test key auth quickly. If it fails, we still try
-  -- sshfs — the user might use SSH_ASKPASS, ControlMaster, or password
-  -- auth. The sshfs call has a 15s timeout to prevent hanging.
+  -- Prepare environment for sshfs job. Copy existing env and add helpers.
+  local env = vim.fn.environ()
+
+  -- Preflight check: test key auth quickly.
+  local sshpass_cmd = nil
   if config.ssh.preflight_check then
     local ok, msg = M.preflight(uri)
     if not ok then
-      notify.warn("Key auth unavailable for " .. key .. " (" .. msg .. "), trying sshfs…")
+      -- Key auth failed — prompt for password so sshfs can authenticate
+      local prompt = "SSH password for "
+      if uri.user then
+        prompt = prompt .. uri.user .. "@"
+      end
+      prompt = prompt .. uri.host .. ": "
+      local pass = vim.fn.inputsecret(prompt)
+      if pass == "" then
+        mount_in_progress[key] = nil
+        return nil, "password required but not provided"
+      end
+      -- Use sshpass to provide the password to sshfs
+      sshpass_cmd = { "sshpass", "-e", "--" }
+      -- Store in SSHPASS env var (safer than -p which leaks in /proc)
+      env["SSHPASS"] = pass
+      pass = nil -- clear from Lua memory
     else
       notify.debug("preflight OK for " .. key)
     end
@@ -155,7 +172,16 @@ function M.mount(uri)
   end
   target = target .. uri.host .. ":/"
 
-  local args = { sshfs_bin, target, mount_path }
+  local args = {}
+  -- Prepend sshpass wrapper if password auth is needed
+  if sshpass_cmd then
+    for _, a in ipairs(sshpass_cmd) do
+      table.insert(args, a)
+    end
+  end
+  table.insert(args, sshfs_bin)
+  table.insert(args, target)
+  table.insert(args, mount_path)
   for _, arg in ipairs(config.sshfs_args or {}) do
     table.insert(args, arg)
   end
@@ -167,9 +193,7 @@ function M.mount(uri)
 
   notify.debug("sshfs mount: " .. table.concat(args, " "))
 
-  -- Set SSH_ASKPASS to enable GUI password prompts on macOS.
-  -- Without this, sshfs has no way to ask for a password inside Neovim.
-  local env = vim.fn.environ()
+  -- Set SSH_ASKPASS as a fallback GUI password prompt on macOS.
   local askpass = vim.fn.expand("~/.local/bin/ssh-askpass-seamless")
   if vim.fn.filereadable(askpass) == 1 then
     env["SSH_ASKPASS"] = askpass
