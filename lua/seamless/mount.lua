@@ -178,9 +178,49 @@ function M.mount(uri)
     env["SSH_ASKPASS"] = askpass
   end
 
-  -- Retry loop: sshpass exit code 5 = wrong password → re-prompt
+  -- Retry loop: password preflight validates the password, then sshfs
+  -- runs in foreground mode (-f) because macFUSE daemon mode is known to
+  -- hang on macOS 27 (see macfuse/macfuse#1003).
   while true do
-    -- Build args fresh each iteration (sshpass_cmd may be added mid-loop)
+    -- If using password, validate via a quick SSH preflight before
+    -- launching sshfs. This lets us re-prompt on wrong password without
+    -- waiting for sshfs to fail. vim.fn.system() doesn't share jobstart's
+    -- env table, so we pass the password via -p (brief, one-shot).
+    if sshpass_cmd then
+      local pw_check_cmd = {
+        "sshpass", "-p", env["SSHPASS"],
+        config.ssh.binary or "ssh",
+        "-o", "BatchMode=no",
+        "-o", "ConnectTimeout=" .. (config.ssh.preflight_timeout or 5),
+        "-o", "StrictHostKeyChecking=accept-new",
+        target:sub(1, -3),  -- strip trailing ":/"
+        "echo ok",
+      }
+      local pw_output = vim.fn.system(pw_check_cmd)
+      local pw_exit = vim.v.shell_error
+
+      if pw_exit == 5 then
+        -- sshpass exit 5 = incorrect password
+        local host_label = uri.user and (uri.user .. "@" .. uri.host) or uri.host
+        local pass = vim.fn.inputsecret("Incorrect password. SSH password for "
+          .. host_label .. ": ")
+        if pass == "" then
+          mount_in_progress[key] = nil
+          return nil, ""  -- user cancelled, not an error
+        end
+        env["SSHPASS"] = pass
+        pass = nil
+        -- loop back to re-validate with new password
+        goto continue
+      elseif pw_exit ~= 0 then
+        mount_in_progress[key] = nil
+        return nil, "SSH authentication failed: " .. vim.trim(pw_output)
+      end
+      -- Password is valid — proceed to mount
+    end
+
+    -- Build args with -f (foreground). sshfs won't daemonize, so we
+    -- detach the job and poll the mount table ourselves.
     local args = {}
     if sshpass_cmd then
       for _, a in ipairs(sshpass_cmd) do
@@ -188,6 +228,7 @@ function M.mount(uri)
       end
     end
     table.insert(args, sshfs_bin)
+    table.insert(args, "-f")
     table.insert(args, target)
     table.insert(args, mount_path)
     for _, arg in ipairs(config.sshfs_args or {}) do
@@ -199,31 +240,11 @@ function M.mount(uri)
     end
 
     notify.debug("sshfs mount: " .. table.concat(args, " "))
-
-    -- Show connecting indicator — blocking jobwait prevents normal redraw
-    if sshpass_cmd then
-      notify.connecting(key)
-    end
-
-    -- Run sshfs with a timeout (sshfs daemonizes on success, so the parent
-    -- process exits quickly after establishing the mount).
-    local sshfs_stdout = {}
-    local sshfs_stderr = {}
+    notify.connecting(key)
 
     local job_id = vim.fn.jobstart(args, {
       env = env,
-      stdout_buffered = false,
-      stderr_buffered = false,
-      on_stdout = function(_, data)
-        if data then
-          for _, line in ipairs(data) do table.insert(sshfs_stdout, line) end
-        end
-      end,
-      on_stderr = function(_, data)
-        if data then
-          for _, line in ipairs(data) do table.insert(sshfs_stderr, line) end
-        end
-      end,
+      detach = true,
     })
 
     if job_id <= 0 then
@@ -231,58 +252,28 @@ function M.mount(uri)
       return nil, "failed to start sshfs process"
     end
 
-    -- jobwait handles daemonizing: sshfs parent exits after establishing
-    -- the mount, so jobwait returns with exit code. -1 means timeout.
-    local result = vim.fn.jobwait({ job_id }, 15000)
-    local exit_code = result[1]
+    -- Poll mount table. macFUSE mount is synchronous — the mount should
+    -- appear as soon as the SSH + SFTP session is established.
+    local mounted = vim.wait(15000, function()
+      local output = vim.fn.system({ "mount" })
+      return output:find(mount_path, 1, true) ~= nil
+    end, 200, false)
 
-    if exit_code == -1 then
-      -- Timeout — sshfs hung (password prompt, network issue, etc.)
-      vim.fn.jobstop(job_id)
-      mount_in_progress[key] = nil
-      return nil, "sshfs timed out after 15s — check authentication"
-    end
-
-    if exit_code == 0 then
-      -- Success — exit retry loop
+    if mounted then
       break
     end
 
-    -- sshpass exit code 5 = incorrect password — let user retry
-    if exit_code == 5 and sshpass_cmd then
-      local host_label = uri.user and (uri.user .. "@" .. uri.host) or uri.host
-      local pass = vim.fn.inputsecret("Incorrect password. SSH password for "
-        .. host_label .. ": ")
-      if pass == "" then
-        mount_in_progress[key] = nil
-        return nil, ""  -- user cancelled, not an error
-      end
-      env["SSHPASS"] = pass
-      pass = nil
-    else
-      -- Any other error: report and fail
-      mount_in_progress[key] = nil
-      local err_msg = table.concat(sshfs_stderr, "\n")
-      if err_msg == "" then
-        err_msg = table.concat(sshfs_stdout, "\n")
-      end
-      if err_msg == "" then
-        err_msg = "sshfs exited with code " .. exit_code
-      end
-      return nil, vim.trim(err_msg)
-    end
-  end
-
-  -- When password auth was used, verify the mount actually exists before
-  -- reporting success. fuse-t + password is known to exit 0 silently on
-  -- failure. Key auth doesn't need this — the mount is always reliable.
-  if sshpass_cmd then
-    local mount_output = vim.fn.system({ "mount" })
-    if not mount_output:find(mount_path, 1, true) then
-      mount_in_progress[key] = nil
-      notify.warn("Mount verification failed for " .. key .. " — sshfs reported success but mount is not active")
+    -- Mount didn't appear. If using password, the preflight passed so
+    -- this is an unexpected failure — don't re-prompt.
+    vim.fn.jobstop(job_id)
+    mount_in_progress[key] = nil
+    if sshpass_cmd then
+      notify.warn("Mount verification failed for " .. key .. " — sshfs did not establish the mount")
       return nil, ""
+    else
+      return nil, "sshfs failed to establish mount"
     end
+    ::continue::
   end
 
   -- Record mount
