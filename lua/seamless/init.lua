@@ -197,6 +197,15 @@ function M._handle_remote_uri(raw_uri)
     -- :edit may replace the current buffer; track whichever is now current
     local dir_buf = vim.api.nvim_get_current_buf()
     buffer_hosts[dir_buf] = key
+
+    -- Tell nvim-tree (or compatible file-tree) to switch to the remote directory.
+    -- cd changes vim's working directory so file operations resolve correctly.
+    vim.cmd("cd " .. vim.fn.fnameescape(local_path))
+    pcall(function()
+      local nvim_tree_api = require("nvim-tree.api")
+      nvim_tree_api.tree.change_root(local_path)
+    end)
+
     return
   end
 
