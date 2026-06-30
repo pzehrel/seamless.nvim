@@ -167,6 +167,14 @@ function M.mount(uri)
 
   notify.debug("sshfs mount: " .. table.concat(args, " "))
 
+  -- Set SSH_ASKPASS to enable GUI password prompts on macOS.
+  -- Without this, sshfs has no way to ask for a password inside Neovim.
+  local env = vim.fn.environ()
+  local askpass = vim.fn.expand("~/.local/bin/ssh-askpass-seamless")
+  if vim.fn.filereadable(askpass) == 1 then
+    env["SSH_ASKPASS"] = askpass
+  end
+
   -- Run sshfs with a timeout to prevent Neovim from freezing when
   -- authentication requires interactive input (password, host key, etc.).
   local sshfs_stdout = {}
@@ -174,6 +182,7 @@ function M.mount(uri)
   local sshfs_done = false
 
   local job_id = vim.fn.jobstart(args, {
+    env = env,
     stdout_buffered = false,
     stderr_buffered = false,
     on_stdout = function(_, data)
