@@ -176,8 +176,10 @@ function M._handle_remote_uri(raw_uri)
   -- 4. Read file into current buffer
   local current_buf = vim.api.nvim_get_current_buf()
 
-  -- Check if the file exists locally (it should, since sshfs mounted it)
-  local stat = vim.loop.fs_stat(local_path)
+  -- Check if the file exists locally (it should, since sshfs mounted it).
+  -- Strip trailing slash — fs_stat returns nil for paths ending in /.
+  local stat_path = local_path:gsub("/$", "")
+  local stat = vim.loop.fs_stat(stat_path ~= "" and stat_path or "/")
 
   if stat and stat.type == "directory" then
     -- It's a directory — set as a directory buffer so file explorers can use it
