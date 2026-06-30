@@ -171,8 +171,6 @@ function M._handle_remote_uri(raw_uri)
 
   -- 3. Convert remote path to local (mount_path already includes hostname)
   local local_path = mount_path .. parsed.path
-  path.ensure_parent_dir(local_path)
-
   notify.debug("local path: " .. local_path)
 
   -- 4. Read file into current buffer
@@ -209,7 +207,9 @@ function M._handle_remote_uri(raw_uri)
     return
   end
 
-  -- 5. Set up buffer for file (existing or new)
+  -- 5. Set up buffer for file (existing or new).
+  -- Only files need parent directories created; directories exist already.
+  path.ensure_parent_dir(local_path)
   local buf_ok, buf_err = pcall(function()
     if stat and stat.type == "file" then
       -- Read file content into buffer (vim.fn.readfile handles binary safely)
