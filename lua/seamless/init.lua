@@ -175,9 +175,28 @@ function M._handle_remote_uri(raw_uri)
   -- 4. Read file into current buffer
   local current_buf = vim.api.nvim_get_current_buf()
 
-  -- Use :edit to let Neovim handle the path (detects file vs directory).
-  -- This avoids NFS stat issues with fuse-t. For directories, netrw or
-  -- the user's file-tree plugin will take over automatically.
+  -- Check if it's a directory or file.
+  local is_dir = vim.fn.isdirectory(local_path) == 1
+
+  if is_dir then
+    -- Directory: tell nvim-tree to open the remote dir, then cd so file
+    -- operations (like :e ./somefile) resolve correctly within the mount.
+    vim.cmd("cd " .. vim.fn.fnameescape(local_path))
+    local tree_opened = pcall(function()
+      local api = require("nvim-tree.api")
+      api.tree.open({ path = local_path, current_window = true })
+    end)
+    -- Fallback: if nvim-tree isn't available, cd and open the directory.
+    if not tree_opened then
+      vim.cmd("edit " .. vim.fn.fnameescape(local_path))
+    end
+    -- Track the buffer that nvim-tree creates
+    local dir_buf = vim.api.nvim_get_current_buf()
+    buffer_hosts[dir_buf] = key
+    return
+  end
+
+  -- File (existing or new): just :edit — Neovim reads it natively.
   local edit_ok, edit_err = pcall(function()
     vim.cmd("edit " .. vim.fn.fnameescape(local_path))
   end)
@@ -187,23 +206,11 @@ function M._handle_remote_uri(raw_uri)
     return
   end
 
-  -- :edit may replace the buffer; track whichever is now current
   local target_buf = vim.api.nvim_get_current_buf()
   buffer_hosts[target_buf] = key
-
-  -- If it's a directory, switch file-tree to show it
-  if vim.fn.isdirectory(local_path) == 1 then
-    vim.cmd("cd " .. vim.fn.fnameescape(local_path))
-    pcall(function()
-      local nvim_tree_api = require("nvim-tree.api")
-      nvim_tree_api.tree.change_root(local_path)
-    end)
-  else
-    -- Ensure filetype detection runs
-    vim.api.nvim_buf_call(target_buf, function()
-      vim.cmd("filetype detect")
-    end)
-  end
+  vim.api.nvim_buf_call(target_buf, function()
+    vim.cmd("filetype detect")
+  end)
 end
 
 ---Handler for :SeamlessConnect <host>:/path
