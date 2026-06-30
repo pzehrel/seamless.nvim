@@ -177,10 +177,20 @@ function M._handle_remote_uri(raw_uri)
   local current_buf = vim.api.nvim_get_current_buf()
 
   if vim.fn.isdirectory(local_path) == 1 then
-    -- Directory: set name, cd, and let the user browse
-    vim.bo[current_buf].buftype = ""
-    vim.api.nvim_buf_set_name(current_buf, local_path)
-    vim.cmd("cd " .. vim.fn.fnameescape(local_path))
+    -- Directory: use :edit so Neovim properly takes ownership of the
+    -- buffer (BufReadCmd expects the buffer to be "read"). Without this,
+    -- Neovim may wipe the empty buffer, triggering BufWipeout → refcount
+    -- drops to 0 → unmount.
+    vim.cmd("edit " .. vim.fn.fnameescape(local_path))
+    local dir_buf = vim.api.nvim_get_current_buf()
+    buffer_hosts[dir_buf] = key
+    mount.mark_directory(key)  -- survive until exit, not orphan-unmount
+    local original_cwd = vim.fn.getcwd()
+    pcall(vim.fn.chdir, local_path)
+    pcall(vim.fn.chdir, original_cwd)
+    vim.defer_fn(function()
+      pcall(vim.fn.chdir, local_path)
+    end, 100)
   elseif vim.fn.filereadable(local_path) == 1 then
     -- Existing file: read content directly
     local lines = vim.fn.readfile(local_path)
@@ -188,6 +198,7 @@ function M._handle_remote_uri(raw_uri)
     vim.bo[current_buf].buftype = ""
     vim.bo[current_buf].modified = false
     vim.api.nvim_buf_set_name(current_buf, local_path)
+    buffer_hosts[current_buf] = key
     vim.api.nvim_buf_call(current_buf, function()
       vim.cmd("filetype detect")
     end)
@@ -196,9 +207,8 @@ function M._handle_remote_uri(raw_uri)
     vim.bo[current_buf].buftype = ""
     vim.bo[current_buf].modified = false
     vim.api.nvim_buf_set_name(current_buf, local_path)
+    buffer_hosts[current_buf] = key
   end
-
-  buffer_hosts[current_buf] = key
 end
 
 ---Handler for :SeamlessConnect <host>:/path

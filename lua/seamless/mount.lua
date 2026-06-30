@@ -275,7 +275,9 @@ function M.ref_inc(host)
 end
 
 ---Decrement reference count for a host.
----If refcount reaches 0 and on_buffer_orphan is enabled, unmount.
+---If refcount reaches 0 and on_buffer_orphan is enabled, unmount —
+---unless a directory was ever opened for this host, in which case
+---unmount is deferred to Neovim exit (on_exit).
 ---@param host string
 function M.ref_dec(host)
   local m = mounts[host]
@@ -285,8 +287,19 @@ function M.ref_dec(host)
   m.refcount = math.max(0, m.refcount - 1)
   notify.debug("refcount-- " .. host .. " → " .. m.refcount)
 
-  if m.refcount == 0 and config.unmount.on_buffer_orphan then
+  if m.refcount == 0 and config.unmount.on_buffer_orphan and not m.has_directory then
     M.unmount(host)
+  end
+end
+
+---Mark a host as having had a directory opened. Once marked, the
+---host will not be auto-unmounted on buffer-orphan — it survives
+---until Neovim exit (on_exit).
+---@param host string
+function M.mark_directory(host)
+  local m = mounts[host]
+  if m then
+    m.has_directory = true
   end
 end
 
