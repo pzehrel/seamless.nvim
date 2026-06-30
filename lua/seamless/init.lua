@@ -176,85 +176,34 @@ function M._handle_remote_uri(raw_uri)
   -- 4. Read file into current buffer
   local current_buf = vim.api.nvim_get_current_buf()
 
-  -- Check if the file exists locally (it should, since sshfs mounted it).
-  -- Strip trailing slash — fs_stat returns nil for paths ending in /.
-  -- Retry up to 10 times (1s) — the fuse-t NFS mount may not be ready
-  -- immediately after sshfs returns.
-  local stat_path = local_path:gsub("/$", "")
-  if stat_path == "" then stat_path = "/" end
-  local stat = nil
-  local is_dir = false
-  for _ = 1, 10 do
-    stat = vim.loop.fs_stat(stat_path)
-    -- Also try vim.fn.isdirectory which handles NFS better than libuv
-    if vim.fn.isdirectory(stat_path) == 1 then
-      is_dir = true
-      break
-    end
-    if stat and stat.type == "file" then break end
-    vim.wait(100, function() return false end, 0, false)
+  -- Use :edit to let Neovim handle the path (detects file vs directory).
+  -- This avoids NFS stat issues with fuse-t. For directories, netrw or
+  -- the user's file-tree plugin will take over automatically.
+  local edit_ok, edit_err = pcall(function()
+    vim.cmd("edit " .. vim.fn.fnameescape(local_path))
+  end)
+  if not edit_ok then
+    notify.error("Failed to open " .. local_path .. ": " .. tostring(edit_err))
+    mount.ref_dec(key)
+    return
   end
 
-  if is_dir or (stat and stat.type == "directory") then
-    -- It's a directory — set as a directory buffer so file explorers can use it
-    local ok, dir_err = pcall(function()
-      vim.api.nvim_buf_set_name(current_buf, local_path)
-      vim.api.nvim_buf_set_option(current_buf, "buftype", "")
-      -- Let the file explorer or netrw take over for directory browsing
-      vim.cmd("edit " .. vim.fn.fnameescape(local_path))
-    end)
-    if not ok then
-      notify.error("Failed to set up directory buffer: " .. tostring(dir_err))
-      mount.ref_dec(key)
-      return
-    end
-    -- :edit may replace the current buffer; track whichever is now current
-    local dir_buf = vim.api.nvim_get_current_buf()
-    buffer_hosts[dir_buf] = key
+  -- :edit may replace the buffer; track whichever is now current
+  local target_buf = vim.api.nvim_get_current_buf()
+  buffer_hosts[target_buf] = key
 
-    -- Tell nvim-tree (or compatible file-tree) to switch to the remote directory.
-    -- cd changes vim's working directory so file operations resolve correctly.
+  -- If it's a directory, switch file-tree to show it
+  if vim.fn.isdirectory(local_path) == 1 then
     vim.cmd("cd " .. vim.fn.fnameescape(local_path))
     pcall(function()
       local nvim_tree_api = require("nvim-tree.api")
       nvim_tree_api.tree.change_root(local_path)
     end)
-
-    return
-  end
-
-  -- 5. Set up buffer for file (existing or new).
-  -- Only files need parent directories created; directories exist already.
-  path.ensure_parent_dir(local_path)
-  local buf_ok, buf_err = pcall(function()
-    if stat and stat.type == "file" then
-      -- Read file content into buffer (vim.fn.readfile handles binary safely)
-      local lines = vim.fn.readfile(local_path)
-      vim.api.nvim_buf_set_lines(current_buf, 0, -1, false, lines)
-      vim.api.nvim_buf_set_option(current_buf, "modified", false)
-    else
-      -- File doesn't exist yet — create empty buffer at that path
-      -- (sshfs will create it on :w)
-      vim.api.nvim_buf_set_lines(current_buf, 0, -1, false, {})
-      vim.api.nvim_buf_set_option(current_buf, "modified", false)
-    end
-
-    -- Set buffer name to the local path (so :w writes back through sshfs)
-    vim.api.nvim_buf_set_name(current_buf, local_path)
-    vim.api.nvim_buf_set_option(current_buf, "buftype", "")
-
-    -- Track buffer → host mapping for refcount
-    buffer_hosts[current_buf] = key
-
-    -- Set filetype based on extension
-    vim.api.nvim_buf_call(current_buf, function()
+  else
+    -- Ensure filetype detection runs
+    vim.api.nvim_buf_call(target_buf, function()
       vim.cmd("filetype detect")
     end)
-  end)
-
-  if not buf_ok then
-    notify.error("Failed to set up buffer: " .. tostring(buf_err))
-    mount.ref_dec(key)
   end
 end
 

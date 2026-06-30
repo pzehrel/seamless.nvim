@@ -29,7 +29,11 @@ end
 ---@param filepath string Full local file path
 function M.ensure_parent_dir(filepath)
   local parent = vim.fn.fnamemodify(filepath, ":h")
-  vim.fn.mkdir(parent, "p")
+  -- Only call mkdir if parent doesn't already exist (avoids NFS I/O errors
+  -- on some fuse implementations where mkdir on existing dirs can fail).
+  if vim.fn.isdirectory(parent) == 0 then
+    vim.fn.mkdir(parent, "p")
+  end
 end
 
 ---Given a local path inside a mount, extract the remote URI components.
