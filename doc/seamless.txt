@@ -169,7 +169,7 @@ System deps (client only — nothing required on the remote server):
 
   macOS:
     brew tap macos-fuse-t/cask
-    brew install fuse-t fuse-t-sshfs
+    brew install --cask fuse-t fuse-t-sshfs
     (If brew refuses the tap: `brew trust macos-fuse-t/cask`)
 
   Debian:  `sudo apt install sshfs`

@@ -21,9 +21,9 @@
 **macOS：**
 ```bash
 brew tap macos-fuse-t/cask
-brew install fuse-t           # 可能需要 sudo + 系统偏好设置中允许
-brew trust macos-fuse-t/cask  # 信任 tap（否则 sshfs 安装被拒）
-brew install fuse-t-sshfs
+brew install --cask fuse-t      # 可能需要 sudo + 系统偏好设置中允许
+brew trust macos-fuse-t/cask     # 信任 tap（否则 sshfs 安装被拒）
+brew install --cask fuse-t-sshfs
 ```
 
 > **注意 macOS 27+**：Homebrew 的 macFUSE 5.2.0 不兼容此系统。fuse-t 是纯用户态替代，无需内核扩展。

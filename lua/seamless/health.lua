@@ -23,7 +23,7 @@ function M.check()
     vim.health.error(
       "sshfs not found in $PATH",
       {
-        "macOS:  brew tap macos-fuse-t/cask && brew install fuse-t fuse-t-sshfs",
+        "macOS:  brew tap macos-fuse-t/cask && brew install --cask fuse-t fuse-t-sshfs",
         "Debian: sudo apt install sshfs",
         "Arch:   sudo pacman -S sshfs",
       }
@@ -84,7 +84,7 @@ function M.check()
     if not found then
       vim.health.warn(
         "fuse-t not found — sshfs requires a FUSE implementation on macOS",
-        { "Install: brew tap macos-fuse-t/cask && brew install fuse-t fuse-t-sshfs" }
+        { "Install: brew tap macos-fuse-t/cask && brew install --cask fuse-t fuse-t-sshfs" }
       )
     end
   elseif vim.fn.has("linux") == 1 then
