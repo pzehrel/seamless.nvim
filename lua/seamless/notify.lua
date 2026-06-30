@@ -55,6 +55,17 @@ function M.warn(msg)
   notify("⚠️ " .. msg, vim.log.levels.WARN)
 end
 
+---Connecting notification (shown before blocking operations)
+---@param host string
+function M.connecting(host)
+  vim.notify("🔗 Connecting to " .. host .. " ...", vim.log.levels.INFO, {
+    title = "seamless.nvim",
+    timeout = 15000,
+  })
+  -- Force redraw so the notification is visible before blocking on jobwait
+  vim.cmd("redraw")
+end
+
 ---Debug log (only when log_level is "debug")
 ---@param msg string
 function M.debug(msg)

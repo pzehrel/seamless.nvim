@@ -148,7 +148,7 @@ function M.mount(uri)
       local pass = vim.fn.inputsecret(prompt)
       if pass == "" then
         mount_in_progress[key] = nil
-        return nil, "password required but not provided"
+        return nil, ""  -- user cancelled, not an error
       end
       -- Use sshpass to provide the password to sshfs
       sshpass_cmd = { "sshpass", "-e", "--" }
@@ -164,7 +164,7 @@ function M.mount(uri)
   local mount_path = path.host_mount_path(uri, config.mount_base)
   vim.fn.mkdir(mount_path, "p")
 
-  -- Build sshfs command
+  -- Build sshfs target once (doesn't change on retry)
   local sshfs_bin = config.sshfs_binary or "sshfs"
   local target = ""
   if uri.user then
@@ -172,83 +172,105 @@ function M.mount(uri)
   end
   target = target .. uri.host .. ":/"
 
-  local args = {}
-  -- Prepend sshpass wrapper if password auth is needed
-  if sshpass_cmd then
-    for _, a in ipairs(sshpass_cmd) do
-      table.insert(args, a)
-    end
-  end
-  table.insert(args, sshfs_bin)
-  table.insert(args, target)
-  table.insert(args, mount_path)
-  for _, arg in ipairs(config.sshfs_args or {}) do
-    table.insert(args, arg)
-  end
-
-  if uri.port then
-    table.insert(args, "-p")
-    table.insert(args, uri.port)
-  end
-
-  notify.debug("sshfs mount: " .. table.concat(args, " "))
-
   -- Set SSH_ASKPASS as a fallback GUI password prompt on macOS.
   local askpass = vim.fn.expand("~/.local/bin/ssh-askpass-seamless")
   if vim.fn.filereadable(askpass) == 1 then
     env["SSH_ASKPASS"] = askpass
   end
 
-  -- Run sshfs with a timeout (sshfs daemonizes on success, so the parent
-  -- process exits quickly after establishing the mount).
-  local sshfs_stdout = {}
-  local sshfs_stderr = {}
-
-  local job_id = vim.fn.jobstart(args, {
-    env = env,
-    stdout_buffered = false,
-    stderr_buffered = false,
-    on_stdout = function(_, data)
-      if data then
-        for _, line in ipairs(data) do table.insert(sshfs_stdout, line) end
+  -- Retry loop: sshpass exit code 5 = wrong password → re-prompt
+  while true do
+    -- Build args fresh each iteration (sshpass_cmd may be added mid-loop)
+    local args = {}
+    if sshpass_cmd then
+      for _, a in ipairs(sshpass_cmd) do
+        table.insert(args, a)
       end
-    end,
-    on_stderr = function(_, data)
-      if data then
-        for _, line in ipairs(data) do table.insert(sshfs_stderr, line) end
+    end
+    table.insert(args, sshfs_bin)
+    table.insert(args, target)
+    table.insert(args, mount_path)
+    for _, arg in ipairs(config.sshfs_args or {}) do
+      table.insert(args, arg)
+    end
+    if uri.port then
+      table.insert(args, "-p")
+      table.insert(args, uri.port)
+    end
+
+    notify.debug("sshfs mount: " .. table.concat(args, " "))
+
+    -- Show connecting indicator — blocking jobwait prevents normal redraw
+    if sshpass_cmd then
+      notify.connecting(key)
+    end
+
+    -- Run sshfs with a timeout (sshfs daemonizes on success, so the parent
+    -- process exits quickly after establishing the mount).
+    local sshfs_stdout = {}
+    local sshfs_stderr = {}
+
+    local job_id = vim.fn.jobstart(args, {
+      env = env,
+      stdout_buffered = false,
+      stderr_buffered = false,
+      on_stdout = function(_, data)
+        if data then
+          for _, line in ipairs(data) do table.insert(sshfs_stdout, line) end
+        end
+      end,
+      on_stderr = function(_, data)
+        if data then
+          for _, line in ipairs(data) do table.insert(sshfs_stderr, line) end
+        end
+      end,
+    })
+
+    if job_id <= 0 then
+      mount_in_progress[key] = nil
+      return nil, "failed to start sshfs process"
+    end
+
+    -- jobwait handles daemonizing: sshfs parent exits after establishing
+    -- the mount, so jobwait returns with exit code. -1 means timeout.
+    local result = vim.fn.jobwait({ job_id }, 15000)
+    local exit_code = result[1]
+
+    if exit_code == -1 then
+      -- Timeout — sshfs hung (password prompt, network issue, etc.)
+      vim.fn.jobstop(job_id)
+      mount_in_progress[key] = nil
+      return nil, "sshfs timed out after 15s — check authentication"
+    end
+
+    if exit_code == 0 then
+      -- Success — exit retry loop
+      break
+    end
+
+    -- sshpass exit code 5 = incorrect password — let user retry
+    if exit_code == 5 and sshpass_cmd then
+      local host_label = uri.user and (uri.user .. "@" .. uri.host) or uri.host
+      local pass = vim.fn.inputsecret("Incorrect password. SSH password for "
+        .. host_label .. ": ")
+      if pass == "" then
+        mount_in_progress[key] = nil
+        return nil, ""  -- user cancelled, not an error
       end
-    end,
-  })
-
-  if job_id <= 0 then
-    mount_in_progress[key] = nil
-    return nil, "failed to start sshfs process"
-  end
-
-  -- jobwait handles daemonizing: sshfs parent exits after establishing
-  -- the mount, so jobwait returns with exit code. -1 means timeout.
-  local result = vim.fn.jobwait({ job_id }, 15000)
-  local exit_code = result[1]
-
-  if exit_code == -1 then
-    -- Timeout — sshfs hung (password prompt, network issue, etc.)
-    vim.fn.jobstop(job_id)
-    mount_in_progress[key] = nil
-    return nil, "sshfs timed out after 15s — check authentication"
-  end
-
-  -- sshfs daemonizes on success (exit code 0). Non-zero means it failed
-  -- before daemonizing (bad password, connection refused, etc.).
-  if exit_code ~= 0 then
-    mount_in_progress[key] = nil
-    local err_msg = table.concat(sshfs_stderr, "\n")
-    if err_msg == "" then
-      err_msg = table.concat(sshfs_stdout, "\n")
+      env["SSHPASS"] = pass
+      pass = nil
+    else
+      -- Any other error: report and fail
+      mount_in_progress[key] = nil
+      local err_msg = table.concat(sshfs_stderr, "\n")
+      if err_msg == "" then
+        err_msg = table.concat(sshfs_stdout, "\n")
+      end
+      if err_msg == "" then
+        err_msg = "sshfs exited with code " .. exit_code
+      end
+      return nil, vim.trim(err_msg)
     end
-    if err_msg == "" then
-      err_msg = "sshfs exited with code " .. exit_code
-    end
-    return nil, vim.trim(err_msg)
   end
 
   -- Record mount

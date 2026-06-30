@@ -164,7 +164,9 @@ function M._handle_remote_uri(raw_uri)
   -- 2. Mount (or reuse existing)
   local mount_path, mount_err = mount.mount(parsed)
   if not mount_path then
-    notify.error("Failed to mount " .. parsed.host .. ": " .. (mount_err or "unknown error"))
+    if mount_err and mount_err ~= "" then
+      notify.error("Failed to mount " .. parsed.host .. ": " .. mount_err)
+    end
     return
   end
 
