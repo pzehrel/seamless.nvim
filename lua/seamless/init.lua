@@ -172,16 +172,16 @@ function M._handle_remote_uri(raw_uri)
   local local_path = mount_path .. parsed.path
   notify.debug("local path: " .. local_path)
 
-  -- 4. Open the local path. :edit handles both files and directories.
+  -- 4. Set buffer name BEFORE :edit so statusline doesn't see a nil name.
+  -- Then :edit handles file content loading and directory browsing.
   local current_buf = vim.api.nvim_get_current_buf()
+  vim.bo[current_buf].buftype = ""
   vim.api.nvim_buf_set_name(current_buf, local_path)
-  vim.api.nvim_buf_set_option(current_buf, "buftype", "")
   vim.cmd("edit " .. vim.fn.fnameescape(local_path))
 
   local target_buf = vim.api.nvim_get_current_buf()
   buffer_hosts[target_buf] = key
 
-  -- For directories, cd so relative paths resolve inside the mount
   if vim.fn.isdirectory(local_path) == 1 then
     vim.cmd("cd " .. vim.fn.fnameescape(local_path))
   else
