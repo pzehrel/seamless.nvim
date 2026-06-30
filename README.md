@@ -18,38 +18,47 @@
 
 ### System dependencies
 
-Two FUSE implementations are supported on macOS:
+macOS supports two approaches:
 
-**Option A: macFUSE (recommended)**
+**Option A: sshfs-mac (recommended)**
 
-macFUSE requires a kernel extension. On Apple Silicon, you must enable
+```bash
+brew install --cask sshfs-mac
+```
+
+> macOS 27 is currently in beta. The stable `macfuse` cask (5.2.0)
+> that `sshfs-mac` depends on does not support it. Install
+> `macfuse@dev` first, then install the `sshfs-mac` `.pkg` manually:
+> ```bash
+> brew install --cask macfuse@dev
+> brew fetch --cask sshfs-mac
+> sudo installer -pkg ~/Library/Caches/Homebrew/downloads/*sshfs-3.7.5.pkg -target /
+> ```
+
+macFUSE requires a kernel extension. On Apple Silicon, enable
 reduced security in Recovery Mode **before** installing:
 
 1. Shut down, then hold the power button to enter Recovery Mode
 2. **Utilities → Startup Security Utility** → select your disk → **Security Policy**
 3. Choose **Reduced Security** and enable "Allow user management of kernel extensions"
 
-Then install:
-
-```bash
-brew install --cask macfuse
-brew install sshfs
-```
-
 After installing, open **System Settings → Privacy & Security** and click
 "Allow" next to "System software from developer 'Benjamin Fleischer'",
 then restart.
 
-> macOS 27 is currently in beta and requires **macFUSE ≥ 5.3.1**
-> (pre-release). Homebrew's stable `macfuse` cask (5.2.0) does not
-> support it yet — use `brew install --cask macfuse@dev` instead.
-
-To uninstall: `brew uninstall --cask macfuse; brew uninstall sshfs`
+Uninstall:
+```bash
+brew uninstall --cask sshfs-mac macfuse
+```
+> macOS 27:
+> ```bash
+> sudo rm /usr/local/bin/sshfs
+> brew uninstall --cask macfuse@dev
+> ```
 
 **Option B: fuse-t**
 
-Pure userspace, no kernel extension — no Recovery Mode or reduced
-security needed.
+Pure userspace, no kernel extension — no Recovery Mode needed.
 
 ```bash
 brew tap macos-fuse-t/cask
@@ -58,11 +67,16 @@ brew trust macos-fuse-t/cask
 brew install --cask fuse-t-sshfs
 ```
 
-> ⚠️ **Known issue**: fuse-t-sshfs may fail silently with password authentication
-> (`short read on fuse device`). Publickey auth works reliably. Use macFUSE if
-> you need password auth.
->
-> To uninstall: `brew uninstall --cask fuse-t fuse-t-sshfs; brew untap macos-fuse-t/cask`
+> ⚠️ **Known issue**: fuse-t-sshfs fails silently with password
+> authentication (`short read on fuse device`). Publickey auth works.
+> Use sshfs-mac if you need password auth.
+
+Uninstall:
+```bash
+brew uninstall --cask fuse-t fuse-t-sshfs
+sudo rm /usr/local/bin/sshfs
+brew untap macos-fuse-t/cask
+```
 
 **Linux:**
 

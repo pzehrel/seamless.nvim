@@ -167,15 +167,15 @@ Plugin dep:    plenary.nvim
 
 System deps (client only — nothing required on the remote server):
 
-  macOS (macFUSE, recommended):
+  macOS (sshfs-mac, recommended):
+    `brew install --cask sshfs-mac`
     Requires reduced security in Recovery Mode (Apple Silicon).
-    `brew install --cask macfuse && brew install sshfs`
-    macOS 27 is beta — needs macFUSE ≥ 5.3.1: `brew install --cask macfuse@dev`
+    macOS 27 is beta — install `macfuse@dev` first, then `brew fetch
+    --cask sshfs-mac` and install the .pkg manually.
 
-  macOS (fuse-t, no kernel extension, no Recovery Mode):
-    brew tap macos-fuse-t/cask
-    brew install --cask fuse-t fuse-t-sshfs
-    Known issue: password auth may fail silently — use macFUSE if needed.
+  macOS (fuse-t, no kernel extension):
+    `brew tap macos-fuse-t/cask && brew install --cask fuse-t fuse-t-sshfs`
+    Known issue: password auth may fail silently.
 
   Debian:  `sudo apt install sshfs`
   Arch:    `sudo pacman -S sshfs`
