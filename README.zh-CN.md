@@ -35,7 +35,7 @@ brew install --cask macfuse
 brew install sshfs
 ```
 
-安装后在 **系统设置 → 隐私与安全性** 中点击 macFUSE 内核扩展旁边的"允许"，重启生效。
+安装后在 **系统设置 → 隐私与安全性** 中，点击"来自开发者 Benjamin Fleischer 的系统软件"旁边的"允许"，重启生效。
 
 > macOS 27 当前为 beta 版本，需要 **macFUSE ≥ 5.3.1**
 > （预发布版）。Homebrew 稳定版 `macfuse` cask（5.2.0）

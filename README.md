@@ -37,7 +37,8 @@ brew install sshfs
 ```
 
 After installing, open **System Settings → Privacy & Security** and click
-"Allow" next to the macFUSE kernel extension, then restart.
+"Allow" next to "System software from developer 'Benjamin Fleischer'",
+then restart.
 
 > macOS 27 is currently in beta and requires **macFUSE ≥ 5.3.1**
 > (pre-release). Homebrew's stable `macfuse` cask (5.2.0) does not
