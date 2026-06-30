@@ -179,18 +179,19 @@ function M._handle_remote_uri(raw_uri)
   local is_dir = vim.fn.isdirectory(local_path) == 1
 
   if is_dir then
-    -- Directory: tell nvim-tree to open the remote dir, then cd so file
-    -- operations (like :e ./somefile) resolve correctly within the mount.
+    -- Directory: switch to the remote directory and tell nvim-tree to
+    -- follow. nvim-tree needs change_root BEFORE open so it shows the
+    -- right directory content.
     vim.cmd("cd " .. vim.fn.fnameescape(local_path))
-    local tree_opened = pcall(function()
+    local tree_ok = pcall(function()
       local api = require("nvim-tree.api")
-      api.tree.open({ path = local_path, current_window = true })
+      api.tree.change_root(local_path)
+      api.tree.open()
     end)
-    -- Fallback: if nvim-tree isn't available, cd and open the directory.
-    if not tree_opened then
+    if not tree_ok then
+      -- Fallback: no nvim-tree, just edit the directory
       vim.cmd("edit " .. vim.fn.fnameescape(local_path))
     end
-    -- Track the buffer that nvim-tree creates
     local dir_buf = vim.api.nvim_get_current_buf()
     buffer_hosts[dir_buf] = key
     return
