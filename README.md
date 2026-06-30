@@ -39,10 +39,9 @@ brew install sshfs
 After installing, open **System Settings → Privacy & Security** and click
 "Allow" next to the macFUSE kernel extension, then restart.
 
-> macOS 27 requires **macFUSE ≥ 5.3.1** (pre-release). Homebrew ships the
-> stable 5.2.0 which doesn't support macOS 27 yet — download the `.pkg` from
-> [github.com/macfuse/macfuse/releases](https://github.com/macfuse/macfuse/releases)
-> if `brew install --cask macfuse` installs an older version.
+> macOS 27 is currently in beta and requires **macFUSE ≥ 5.3.1**
+> (pre-release). Homebrew's stable `macfuse` cask (5.2.0) does not
+> support it yet — use `brew install --cask macfuse@dev` instead.
 
 To uninstall: `brew uninstall --cask macfuse; brew uninstall sshfs`
 

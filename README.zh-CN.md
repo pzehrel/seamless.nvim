@@ -37,10 +37,9 @@ brew install sshfs
 
 安装后在 **系统设置 → 隐私与安全性** 中点击 macFUSE 内核扩展旁边的"允许"，重启生效。
 
-> macOS 27 需要 **macFUSE ≥ 5.3.1**（预发布版）。Homebrew 当前提供的是
-> 5.2.0 稳定版，暂不支持 macOS 27。如 `brew install --cask macfuse` 安装
-> 了旧版本，请从 [github.com/macfuse/macfuse/releases](https://github.com/macfuse/macfuse/releases)
-> 下载 .pkg 安装。
+> macOS 27 当前为 beta 版本，需要 **macFUSE ≥ 5.3.1**
+> （预发布版）。Homebrew 稳定版 `macfuse` cask（5.2.0）
+> 尚不支持，请使用 `brew install --cask macfuse@dev`。
 
 卸载：`brew uninstall --cask macfuse; brew uninstall sshfs`
 
