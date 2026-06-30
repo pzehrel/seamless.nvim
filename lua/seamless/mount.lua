@@ -131,17 +131,15 @@ function M.mount(uri)
   -- Mark as in progress — subsequent concurrent callers will wait above
   mount_in_progress[key] = true
 
-  -- Preflight check
+  -- Preflight check: test key auth quickly. If it fails, we still try
+  -- sshfs — the user might use SSH_ASKPASS, ControlMaster, or password
+  -- auth. The sshfs call has a 15s timeout to prevent hanging.
   if config.ssh.preflight_check then
     local ok, msg = M.preflight(uri)
     if not ok then
-      mount_in_progress[key] = nil
-      if config.ssh.force_mount_on_preflight_fail then
-        notify.warn("Preflight failed, but force_mount is enabled. " .. msg)
-      else
-        notify.error(msg)
-        return nil, msg
-      end
+      notify.warn("Key auth unavailable for " .. key .. " (" .. msg .. "), trying sshfs…")
+    else
+      notify.debug("preflight OK for " .. key)
     end
   end
 
@@ -169,23 +167,62 @@ function M.mount(uri)
 
   notify.debug("sshfs mount: " .. table.concat(args, " "))
 
-  -- Run sshfs synchronously (it daemonizes, returns quickly on success)
-  -- Redirect stderr to stdout for error capture
-  local cmd_str = table.concat(
-    vim.tbl_map(vim.fn.shellescape, args),
-    " "
-  ) .. " 2>&1"
+  -- Run sshfs with a timeout to prevent Neovim from freezing when
+  -- authentication requires interactive input (password, host key, etc.).
+  local sshfs_stdout = {}
+  local sshfs_stderr = {}
+  local sshfs_done = false
 
-  local output = vim.fn.system(cmd_str)
-  local exit_code = vim.v.shell_error
+  local job_id = vim.fn.jobstart(args, {
+    stdout_buffered = false,
+    stderr_buffered = false,
+    on_stdout = function(_, data)
+      if data then
+        for _, line in ipairs(data) do table.insert(sshfs_stdout, line) end
+      end
+    end,
+    on_stderr = function(_, data)
+      if data then
+        for _, line in ipairs(data) do table.insert(sshfs_stderr, line) end
+      end
+    end,
+    on_exit = function()
+      sshfs_done = true
+    end,
+  })
 
+  if job_id <= 0 then
+    mount_in_progress[key] = nil
+    return nil, "failed to start sshfs process"
+  end
+
+  -- Wait up to 15 seconds for sshfs to complete
+  local wait_ok = vim.wait(15000, function() return sshfs_done end, 100, false)
+  if not wait_ok then
+    vim.fn.jobstop(job_id)
+    mount_in_progress[key] = nil
+    return nil, "sshfs timed out after 15s — check authentication"
+  end
+
+  -- Collect job result (Neovim 0.9+)
+  local exit_code = 0
+  pcall(function()
+    local info = vim.fn.job_info(job_id)
+    if info then exit_code = info.exit_code end
+  end)
+
+  -- sshfs daemonizes on success (exit code 0), so a non-zero exit
+  -- means something went wrong before daemonization
   if exit_code ~= 0 then
     mount_in_progress[key] = nil
-    local err_msg = vim.trim(output)
+    local err_msg = table.concat(sshfs_stderr, "\n")
+    if err_msg == "" then
+      err_msg = table.concat(sshfs_stdout, "\n")
+    end
     if err_msg == "" then
       err_msg = "sshfs exited with code " .. exit_code
     end
-    return nil, err_msg
+    return nil, vim.trim(err_msg)
   end
 
   -- Record mount
