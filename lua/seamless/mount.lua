@@ -2,7 +2,7 @@
 
 local path = require("seamless.path")
 local notify = require("seamless.notify")
-local uri = require("seamless.uri")
+local uri_mod = require("seamless.uri")
 
 local M = {}
 
@@ -33,7 +33,7 @@ end
 ---@param uri seamless.Uri
 ---@return boolean
 function M.is_mounted(uri)
-  return mounts[uri.host_key(uri)] ~= nil
+  return mounts[uri_mod.host_key(uri)] ~= nil
 end
 
 ---Get the mount entry for a host.
@@ -103,7 +103,7 @@ end
 ---@return string|nil mount_path
 ---@return string|nil error_message
 function M.mount(uri)
-  local key = uri.host_key(uri)
+  local key = uri_mod.host_key(uri)
 
   -- Already mounted → bump refcount
   if mounts[key] then
@@ -145,16 +145,9 @@ function M.mount(uri)
     end
   end
 
-  -- Create mount point
+  -- Create mount point (recursive, like mkdir -p)
   local mount_path = path.host_mount_path(uri, config.mount_base)
-  local create_ok = vim.loop.fs_mkdir(mount_path, 493) -- 0755
-  if not create_ok then
-    -- Directory might already exist; that's fine
-    if vim.fn.isdirectory(mount_path) == 0 then
-      mount_in_progress[key] = nil
-      return nil, "failed to create mount directory: " .. mount_path
-    end
-  end
+  vim.fn.mkdir(mount_path, "p")
 
   -- Build sshfs command
   local sshfs_bin = config.sshfs_binary or "sshfs"
@@ -247,14 +240,14 @@ function M.unmount(host)
 
   -- Try platform-specific unmount commands
   local cmds = {
-    { "fusermount", "-u", m.mount_path },   -- Linux
     { "umount", m.mount_path },              -- macOS / BSD
+    { "fusermount", "-u", m.mount_path },   -- Linux
   }
 
   local ok = false
   for _, cmd in ipairs(cmds) do
-    vim.fn.system(cmd)
-    if vim.v.shell_error == 0 then
+    local sys_ok, _ = pcall(vim.fn.system, cmd)
+    if sys_ok and vim.v.shell_error == 0 then
       ok = true
       break
     end
@@ -369,15 +362,19 @@ function M.cleanup_stale()
     end
     if fs_type == "directory" then
       local full_path = base .. "/" .. name
-      -- Try to unmount first (stale mount from crashed session)
+      -- Try to unmount first (stale mount from crashed session).
+      -- pcalled because fusermount may not exist on macOS.
       for _, cmd in ipairs({
-        { "fusermount", "-u", full_path },
         { "umount", full_path },
+        { "fusermount", "-u", full_path },
       }) do
-        vim.fn.system(cmd)
+        local ok, _ = pcall(vim.fn.system, cmd)
+        if ok and vim.v.shell_error == 0 then
+          break
+        end
       end
       -- Remove directory if it's empty
-      vim.loop.fs_rmdir(full_path)
+      pcall(vim.loop.fs_rmdir, full_path)
     end
   end
 end

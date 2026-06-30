@@ -39,6 +39,17 @@ function M.setup(user_opts)
   -- Create augroup
   local augroup = vim.api.nvim_create_augroup(AUGROUP, { clear = true })
 
+  -- Remove netrw's BufReadCmd handlers for our protocols (netrw registers
+  -- them in the "Network" augroup). Must be done inside the Network augroup
+  -- context because nvim_clear_autocmds/autocmd! cannot target other groups
+  -- from outside.
+  vim.cmd([[
+    augroup Network
+      silent! autocmd! BufReadCmd scp://*
+      silent! autocmd! BufReadCmd sftp://*
+    augroup END
+  ]])
+
   -- Register BufReadCmd for each protocol
   for _, proto in ipairs(opts.protocols) do
     vim.api.nvim_create_autocmd("BufReadCmd", {
@@ -158,8 +169,8 @@ function M._handle_remote_uri(raw_uri)
     return
   end
 
-  -- 3. Convert remote path to local
-  local local_path = path.remote_to_local(parsed, mount_path)
+  -- 3. Convert remote path to local (mount_path already includes hostname)
+  local local_path = mount_path .. parsed.path
   path.ensure_parent_dir(local_path)
 
   notify.debug("local path: " .. local_path)
