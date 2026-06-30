@@ -172,46 +172,23 @@ function M._handle_remote_uri(raw_uri)
   local local_path = mount_path .. parsed.path
   notify.debug("local path: " .. local_path)
 
-  -- 4. Read file into current buffer
+  -- 4. Open the local path. :edit handles both files and directories.
   local current_buf = vim.api.nvim_get_current_buf()
-
-  -- Check if it's a directory or file.
-  local is_dir = vim.fn.isdirectory(local_path) == 1
-
-  if is_dir then
-    -- Directory: switch to the remote directory and tell nvim-tree to
-    -- follow. nvim-tree needs change_root BEFORE open so it shows the
-    -- right directory content.
-    vim.cmd("cd " .. vim.fn.fnameescape(local_path))
-    local tree_ok = pcall(function()
-      local api = require("nvim-tree.api")
-      api.tree.change_root(local_path)
-      api.tree.open()
-    end)
-    if not tree_ok then
-      -- Fallback: no nvim-tree, just edit the directory
-      vim.cmd("edit " .. vim.fn.fnameescape(local_path))
-    end
-    local dir_buf = vim.api.nvim_get_current_buf()
-    buffer_hosts[dir_buf] = key
-    return
-  end
-
-  -- File (existing or new): just :edit — Neovim reads it natively.
-  local edit_ok, edit_err = pcall(function()
-    vim.cmd("edit " .. vim.fn.fnameescape(local_path))
-  end)
-  if not edit_ok then
-    notify.error("Failed to open " .. local_path .. ": " .. tostring(edit_err))
-    mount.ref_dec(key)
-    return
-  end
+  vim.api.nvim_buf_set_name(current_buf, local_path)
+  vim.api.nvim_buf_set_option(current_buf, "buftype", "")
+  vim.cmd("edit " .. vim.fn.fnameescape(local_path))
 
   local target_buf = vim.api.nvim_get_current_buf()
   buffer_hosts[target_buf] = key
-  vim.api.nvim_buf_call(target_buf, function()
-    vim.cmd("filetype detect")
-  end)
+
+  -- For directories, cd so relative paths resolve inside the mount
+  if vim.fn.isdirectory(local_path) == 1 then
+    vim.cmd("cd " .. vim.fn.fnameescape(local_path))
+  else
+    vim.api.nvim_buf_call(target_buf, function()
+      vim.cmd("filetype detect")
+    end)
+  end
 end
 
 ---Handler for :SeamlessConnect <host>:/path
