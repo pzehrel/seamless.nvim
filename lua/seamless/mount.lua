@@ -240,7 +240,8 @@ function M.unmount(host)
 
   -- Try platform-specific unmount commands
   local cmds = {
-    { "umount", m.mount_path },              -- macOS / BSD
+    { "umount", "-f", m.mount_path },        -- macOS (force, close open fds)
+    { "umount", m.mount_path },              -- macOS fallback
     { "fusermount", "-u", m.mount_path },   -- Linux
   }
 
@@ -365,7 +366,7 @@ function M.cleanup_stale()
       -- Try to unmount first (stale mount from crashed session).
       -- pcalled because fusermount may not exist on macOS.
       for _, cmd in ipairs({
-        { "umount", full_path },
+        { "umount", "-f", full_path },
         { "fusermount", "-u", full_path },
       }) do
         local ok, _ = pcall(vim.fn.system, cmd)
