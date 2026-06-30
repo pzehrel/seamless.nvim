@@ -273,6 +273,18 @@ function M.mount(uri)
     end
   end
 
+  -- When password auth was used, verify the mount actually exists before
+  -- reporting success. fuse-t + password is known to exit 0 silently on
+  -- failure. Key auth doesn't need this — the mount is always reliable.
+  if sshpass_cmd then
+    local mount_output = vim.fn.system({ "mount" })
+    if not mount_output:find(mount_path, 1, true) then
+      mount_in_progress[key] = nil
+      notify.warn("Mount verification failed for " .. key .. " — sshfs reported success but mount is not active")
+      return nil, ""
+    end
+  end
+
   -- Record mount
   mounts[key] = {
     mount_path = mount_path,
