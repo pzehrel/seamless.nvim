@@ -174,29 +174,7 @@ function M._handle_remote_uri(raw_uri)
   local local_path = mount_path .. parsed.path
   notify.debug("local path: " .. local_path)
 
-  -- 4. Wait for the path to become accessible. On macOS, fuse-t uses
-  -- localhost NFS which mounts asynchronously — the NFS client may still
-  -- be negotiating after sshfs exits. Linux kernel FUSE is synchronous
-  -- so this is skipped.
-  if vim.fn.has("mac") == 1 or vim.fn.has("macunix") == 1 then
-    local path_ready = vim.wait(5000, function()
-      return vim.fn.isdirectory(local_path) == 1
-        or vim.fn.filereadable(local_path) == 1
-    end, 50, false)
-    if not path_ready then
-      mount.ref_dec(key)
-      notify.error("Path not accessible on " .. key .. " — NFS mount may be slow. Try reopening.")
-      return
-    end
-  end
-
-  -- Emit connected for new mounts (not reuse). mount.lua no longer does this.
-  local mnt = mount.get(key)
-  if mnt and mnt.refcount == 1 then
-    notify.connected(key)
-  end
-
-  -- 5. Read file content directly (avoid :edit which triggers events
+  -- 4. Read file content directly (avoid :edit which triggers events
   -- that may cause NvChad statusline errors with NFS/cwd).
   local current_buf = vim.api.nvim_get_current_buf()
 
