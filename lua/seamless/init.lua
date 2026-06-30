@@ -178,10 +178,24 @@ function M._handle_remote_uri(raw_uri)
 
   -- Check if the file exists locally (it should, since sshfs mounted it).
   -- Strip trailing slash — fs_stat returns nil for paths ending in /.
+  -- Retry up to 10 times (1s) — the fuse-t NFS mount may not be ready
+  -- immediately after sshfs returns.
   local stat_path = local_path:gsub("/$", "")
-  local stat = vim.loop.fs_stat(stat_path ~= "" and stat_path or "/")
+  if stat_path == "" then stat_path = "/" end
+  local stat = nil
+  local is_dir = false
+  for _ = 1, 10 do
+    stat = vim.loop.fs_stat(stat_path)
+    -- Also try vim.fn.isdirectory which handles NFS better than libuv
+    if vim.fn.isdirectory(stat_path) == 1 then
+      is_dir = true
+      break
+    end
+    if stat and stat.type == "file" then break end
+    vim.wait(100, function() return false end, 0, false)
+  end
 
-  if stat and stat.type == "directory" then
+  if is_dir or (stat and stat.type == "directory") then
     -- It's a directory — set as a directory buffer so file explorers can use it
     local ok, dir_err = pcall(function()
       vim.api.nvim_buf_set_name(current_buf, local_path)
