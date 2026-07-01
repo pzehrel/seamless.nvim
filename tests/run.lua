@@ -1,6 +1,7 @@
 local harness = require("plenary.test_harness")
 
-local test_dir = vim.fn.expand("<sfile>:p:h")
+-- Use cwd-based path: <sfile> is unreliable with luafile.
+local test_dir = vim.fn.getcwd() .. "/tests"
 
 harness.test_directory(test_dir, {
 	minimal_init = test_dir .. "/minimal_init.lua",
