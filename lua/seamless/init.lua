@@ -144,12 +144,18 @@ function M.setup(user_opts)
   notify.debug("seamless.nvim setup complete")
 end
 
+-- Prevent re-entrant BufReadCmd: nvim_buf_set_name triggers BufFilePost
+-- which may cause a second BufReadCmd for the same URI.
+local pending_uris = {}
+
 ---Handle a remote URI when BufReadCmd fires.
 ---This is the core entry point — called automatically when a scp:// or sftp://
 ---buffer is opened.
 ---
 ---@param raw_uri string The original URI (e.g. "scp://myserver//etc/hostname")
 function M._handle_remote_uri(raw_uri)
+  if pending_uris[raw_uri] then return end
+  pending_uris[raw_uri] = true
   notify.debug("handle_remote_uri: " .. raw_uri)
 
   -- 1. Parse URI
@@ -174,33 +180,38 @@ function M._handle_remote_uri(raw_uri)
   local local_path = mount_path .. parsed.path
   notify.debug("local path: " .. local_path)
 
-  -- 4. Wait for the specific path to become readable. The mount table
-  -- confirms the mount exists, but the remote directory listing may not
-  -- be ready yet (SSHFS needs a moment to establish the SFTP session).
-  local path_ready = vim.wait(5000, function()
-    return vim.fn.isdirectory(local_path) == 1
-      or vim.fn.filereadable(local_path) == 1
-  end, 50, false)
+  local mnt = mount.get(key)
 
-  if not path_ready then
-    mount.ref_dec(key)
-    notify.error("Path not accessible on " .. key .. " — mount exists but path is not yet readable. Try reopening.")
-    return
+  -- 4. For password auth: verify the mount root is actually serving
+  --    content (scandir finds entries). This is shallower than checking
+  --    the full local_path, so it completes sooner and catches true
+  --    mount failures (e.g. fuse-t + password). Key auth skips this.
+  if mnt and mnt.used_password then
+    local root_ready = vim.wait(5000, function()
+      local h = vim.loop.fs_scandir(mount_path)
+      if h then
+        local entry, _ = vim.loop.fs_scandir_next(h)
+        return entry ~= nil
+      end
+      return false
+    end, 50, false)
+    if not root_ready then
+      mount.ref_dec(key)
+      notify.warn("Mount verification failed for " .. key .. " — mount is not responding")
+      return
+    end
   end
 
-  -- Notify connected now that both mount and path are confirmed ready.
-  local mnt = mount.get(key)
+  -- Notify connected for new mounts (not reuse).
   if mnt and mnt.refcount == 1 then
     notify.connected(key)
   end
 
-  -- 5. Read file content directly (avoid :edit which triggers events
-  -- that may cause NvChad statusline errors with NFS/cwd).
+  -- 5. Three-way branch: directory, existing file, or new file.
   local current_buf = vim.api.nvim_get_current_buf()
 
   if vim.fn.isdirectory(local_path) == 1 then
-    -- Directory: just cd, no buffer, no tree. has_directory ensures
-    -- the mount survives BufWipeout until exit.
+    -- Directory: cd + on_open, no buffer takeover.
     buffer_hosts[current_buf] = key
     mount.mark_directory(key)
     if opts.on_open then opts.on_open(local_path, true) end
@@ -211,7 +222,7 @@ function M._handle_remote_uri(raw_uri)
       pcall(vim.fn.chdir, local_path)
     end, 100)
   elseif vim.fn.filereadable(local_path) == 1 then
-    -- Existing file: read content directly
+    -- Existing file: read content directly.
     local lines = vim.fn.readfile(local_path)
     vim.api.nvim_buf_set_lines(current_buf, 0, -1, false, lines)
     vim.bo[current_buf].buftype = ""
@@ -223,12 +234,40 @@ function M._handle_remote_uri(raw_uri)
       vim.cmd("filetype detect")
     end)
   else
-    -- New file (doesn't exist on remote yet)
-    vim.bo[current_buf].buftype = ""
-    vim.bo[current_buf].modified = false
-    vim.api.nvim_buf_set_name(current_buf, local_path)
+    -- Path doesn't exist. Ask user to create.
+    -- Strip trailing slash: filereadable on "dir/" returns false even if
+    -- "dir" exists as a file.
+    local clean_path = local_path:gsub("/$", "")
+    if vim.fn.filereadable(clean_path) == 1 then
+      notify.warn("A file with this name already exists on " .. key .. " — cannot create directory.")
+      mount.ref_dec(key)
+      pending_uris[raw_uri] = nil
+      return
+    end
+    local choice = vim.fn.confirm("Path does not exist: " .. key .. parsed.path .. "\nCreate it?", "&Yes\n&No", 2)
+    if choice ~= 1 then
+      mount.ref_dec(key)
+      pending_uris[raw_uri] = nil
+      return
+    end
+    local is_dir_uri = parsed.path:sub(-1) == "/"
+    if is_dir_uri then
+      -- Creating a directory: mkdir and done.
+      vim.fn.mkdir(local_path, "p")
+    else
+      -- Creating a file: mkdir parent, rename buffer, write to anchor.
+      local parent = vim.fn.fnamemodify(local_path, ":h")
+      if vim.fn.isdirectory(parent) ~= 1 then
+        vim.fn.mkdir(parent, "p")
+      end
+      vim.api.nvim_buf_set_name(current_buf, local_path)
+      vim.api.nvim_buf_set_lines(current_buf, 0, -1, false, { "" })
+      vim.bo[current_buf].buftype = ""
+      vim.bo[current_buf].modified = false
+      vim.cmd("silent write")
+    end
     buffer_hosts[current_buf] = key
-    if opts.on_open then opts.on_open(local_path, false) end
+    if opts.on_open then opts.on_open(local_path, is_dir_uri) end
   end
 end
 

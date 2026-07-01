@@ -286,6 +286,7 @@ function M.mount(uri)
     refcount = 1,
     host = key,
     last_activity = vim.loop.now(),
+    used_password = sshpass_cmd ~= nil,
   }
 
   mount_in_progress[key] = nil
