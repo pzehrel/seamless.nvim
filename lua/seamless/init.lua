@@ -156,6 +156,14 @@ local pending_uris = {}
 function M._handle_remote_uri(raw_uri)
   if pending_uris[raw_uri] then return end
   pending_uris[raw_uri] = true
+  local ok, re = pcall(M._handle_remote_uri_impl, raw_uri)
+  pending_uris[raw_uri] = nil
+  if not ok and re then error(re) end
+end
+
+---Implementation — wrapped by _handle_remote_uri for re-entrant guard cleanup.
+---@param raw_uri string
+function M._handle_remote_uri_impl(raw_uri)
   notify.debug("handle_remote_uri: " .. raw_uri)
 
   -- 1. Parse URI
@@ -241,13 +249,11 @@ function M._handle_remote_uri(raw_uri)
     if vim.fn.filereadable(clean_path) == 1 then
       notify.warn("A file with this name already exists on " .. key .. " — cannot create directory.")
       mount.ref_dec(key)
-      pending_uris[raw_uri] = nil
       return
     end
     local choice = vim.fn.confirm("Path does not exist: " .. key .. parsed.path .. "\nCreate it?", "&Yes\n&No", 2)
     if choice ~= 1 then
       mount.ref_dec(key)
-      pending_uris[raw_uri] = nil
       return
     end
     local is_dir_uri = parsed.path:sub(-1) == "/"

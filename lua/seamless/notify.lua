@@ -63,7 +63,7 @@ function M.connecting(host)
     timeout = 15000,
   })
   -- Force redraw so the notification is visible before blocking on jobwait
-  vim.cmd("redraw")
+  pcall(vim.cmd, "redraw")
 end
 
 ---Debug log (only when log_level is "debug")

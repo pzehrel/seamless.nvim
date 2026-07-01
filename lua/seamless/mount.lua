@@ -349,13 +349,6 @@ function M.unmount(host)
 
   notify.debug("unmounting: " .. host)
 
-  -- If CWD is inside the mount, switch away before unmounting.
-  -- Otherwise cwd() returns nil and the statusline crashes.
-  local cwd = vim.fn.getcwd()
-  if cwd:find(m.mount_path, 1, true) == 1 then
-    pcall(vim.fn.chdir, vim.fn.expand("~"))
-  end
-
   -- Try platform-specific unmount commands
   local cmds = {
     { "umount", "-f", m.mount_path },        -- macOS (force, close open fds)
@@ -373,6 +366,11 @@ function M.unmount(host)
   end
 
   if ok then
+    -- If CWD was inside the mount, move to ~ to prevent cwd() nil crash.
+    local cwd = vim.fn.getcwd()
+    if cwd:find(m.mount_path, 1, true) == 1 then
+      pcall(vim.fn.chdir, vim.fn.expand("~"))
+    end
     -- Clean up mount directory
     vim.loop.fs_rmdir(m.mount_path)
     if config.notify.on_disconnect then
