@@ -203,6 +203,7 @@ function M._handle_remote_uri(raw_uri)
     -- the mount survives BufWipeout until exit.
     buffer_hosts[current_buf] = key
     mount.mark_directory(key)
+    if opts.on_open then opts.on_open(local_path, true) end
     local original_cwd = vim.fn.getcwd()
     pcall(vim.fn.chdir, local_path)
     pcall(vim.fn.chdir, original_cwd)
