@@ -106,6 +106,7 @@ brew untap macos-fuse-t/cask
 nvim scp://myserver//etc/nginx/nginx.conf
 nvim sftp://user@devbox//var/www/index.html
 nvim scp://myserver:2222//home/user/.bashrc
+nvim scp://192.168.1.100//var/log/syslog
 ```
 
 主机名后面的 `//` 表示远程的绝对路径。

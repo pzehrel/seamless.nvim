@@ -111,6 +111,7 @@ Using [lazy.nvim](https://github.com/folke/lazy.nvim):
 nvim scp://myserver//etc/nginx/nginx.conf
 nvim sftp://user@devbox//var/www/index.html
 nvim scp://myserver:2222//home/user/.bashrc
+nvim scp://192.168.1.100//var/log/syslog
 ```
 
 The `//` after the hostname means an absolute path on the remote.

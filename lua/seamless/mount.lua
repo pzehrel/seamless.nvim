@@ -193,9 +193,13 @@ function M.mount(uri)
         "-o", "BatchMode=no",
         "-o", "ConnectTimeout=" .. (config.ssh.preflight_timeout or 5),
         "-o", "StrictHostKeyChecking=accept-new",
-        target:sub(1, -3),  -- strip trailing ":/"
-        "echo ok",
       }
+      if uri.port then
+        table.insert(pw_check_cmd, "-p")
+        table.insert(pw_check_cmd, uri.port)
+      end
+      table.insert(pw_check_cmd, target:sub(1, -3))  -- strip trailing ":/"
+      table.insert(pw_check_cmd, "echo ok")
       local pw_output = vim.fn.system(pw_check_cmd)
       local pw_exit = vim.v.shell_error
 
