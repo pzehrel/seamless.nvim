@@ -199,15 +199,10 @@ function M._handle_remote_uri(raw_uri)
   local current_buf = vim.api.nvim_get_current_buf()
 
   if vim.fn.isdirectory(local_path) == 1 then
-    -- Directory: use :edit so Neovim properly takes ownership of the
-    -- buffer (BufReadCmd expects the buffer to be "read"). Without this,
-    -- Neovim may wipe the empty buffer, triggering BufWipeout → refcount
-    -- drops to 0 → unmount.
-    vim.cmd("edit " .. vim.fn.fnameescape(local_path))
-    local dir_buf = vim.api.nvim_get_current_buf()
-    buffer_hosts[dir_buf] = key
-    mount.mark_directory(key)  -- survive until exit, not orphan-unmount
-    if opts.on_open then opts.on_open(local_path, true) end
+    -- Directory: just cd, no buffer, no tree. has_directory ensures
+    -- the mount survives BufWipeout until exit.
+    buffer_hosts[current_buf] = key
+    mount.mark_directory(key)
     local original_cwd = vim.fn.getcwd()
     pcall(vim.fn.chdir, local_path)
     pcall(vim.fn.chdir, original_cwd)
