@@ -21,77 +21,77 @@ local M = {}
 ---@return seamless.Uri|nil parsed URI table, or nil on failure
 ---@return string|nil error message
 function M.parse(uri)
-  if not uri or type(uri) ~= "string" then
-    return nil, "URI must be a non-empty string"
-  end
+	if not uri or type(uri) ~= "string" then
+		return nil, "URI must be a non-empty string"
+	end
 
-  -- Lua patterns do not support alternation, so validate scheme first
-  local scheme = uri:match("^(%a+)://")
-  if not scheme or (scheme ~= "scp" and scheme ~= "sftp") then
-    return nil, "unsupported protocol: " .. (scheme or "none")
-  end
+	-- Lua patterns do not support alternation, so validate scheme first
+	local scheme = uri:match("^(%a+)://")
+	if not scheme or (scheme ~= "scp" and scheme ~= "sftp") then
+		return nil, "unsupported protocol: " .. (scheme or "none")
+	end
 
-  -- Strip scheme:// prefix
-  local rest = uri:sub(#scheme + 4)
+	-- Strip scheme:// prefix
+	local rest = uri:sub(#scheme + 4)
 
-  -- Extract optional user@
-  -- (Lua patterns cannot make capture groups optional with ? after a group,
-  --  so we handle it with string search instead)
-  local user = nil
-  local at_pos = rest:find("@")
-  if at_pos then
-    user = rest:sub(1, at_pos - 1)
-    if user == "" then
-      user = nil
-    end
-    rest = rest:sub(at_pos + 1)
-  end
+	-- Extract optional user@
+	-- (Lua patterns cannot make capture groups optional with ? after a group,
+	--  so we handle it with string search instead)
+	local user = nil
+	local at_pos = rest:find("@")
+	if at_pos then
+		user = rest:sub(1, at_pos - 1)
+		if user == "" then
+			user = nil
+		end
+		rest = rest:sub(at_pos + 1)
+	end
 
-  -- Split host:port from path at the first '/'
-  local path_start = rest:find("/")
-  if not path_start then
-    return nil, "path is required"
-  end
+	-- Split host:port from path at the first '/'
+	local path_start = rest:find("/")
+	if not path_start then
+		return nil, "path is required"
+	end
 
-  local path = rest:sub(path_start)
-  local authority = rest:sub(1, path_start - 1)
+	local path = rest:sub(path_start)
+	local authority = rest:sub(1, path_start - 1)
 
-  -- Strip trailing colon from authority for host:port:/path format
-  authority = authority:gsub(":$", "")
+	-- Strip trailing colon from authority for host:port:/path format
+	authority = authority:gsub(":$", "")
 
-  -- Extract host and optional port
-  local host, port = authority:match("^([^:]+):?(%d*)$")
-  if not host or host == "" then
-    return nil, "hostname is required"
-  end
+	-- Extract host and optional port
+	local host, port = authority:match("^([^:]+):?(%d*)$")
+	if not host or host == "" then
+		return nil, "hostname is required"
+	end
 
-  if port == "" then
-    port = nil
-  end
+	if port == "" then
+		port = nil
+	end
 
-  -- Strip leading ':' from path when port is followed by ':'
-  -- e.g. scp://host:2222:/path → path becomes /path
-  if path:sub(1, 1) == ":" then
-    path = path:sub(2)
-  end
+	-- Strip leading ':' from path when port is followed by ':'
+	-- e.g. scp://host:2222:/path → path becomes /path
+	if path:sub(1, 1) == ":" then
+		path = path:sub(2)
+	end
 
-  -- Normalize path:
-  --   //absolute/path → /absolute/path
-  --   /relative/path  → relative to remote root (in sshfs mount of host:/)
-  --   /               → / (root)
-  if path:sub(1, 2) == "//" then
-    path = path:sub(2) -- remove one leading slash → absolute path
-  end
-  -- Single-slash paths are relative to root in the sshfs mount — kept as-is
+	-- Normalize path:
+	--   //absolute/path → /absolute/path
+	--   /relative/path  → relative to remote root (in sshfs mount of host:/)
+	--   /               → / (root)
+	if path:sub(1, 2) == "//" then
+		path = path:sub(2) -- remove one leading slash → absolute path
+	end
+	-- Single-slash paths are relative to root in the sshfs mount — kept as-is
 
-  return {
-    scheme = scheme,
-    user = user,
-    host = host,
-    port = port,
-    path = path,
-    raw = uri,
-  }
+	return {
+		scheme = scheme,
+		user = user,
+		host = host,
+		port = port,
+		path = path,
+		raw = uri,
+	}
 end
 
 ---Generate a host key for mount tracking and path construction.
@@ -100,10 +100,10 @@ end
 ---@param uri seamless.Uri
 ---@return string key
 function M.host_key(uri)
-  if uri.user then
-    return uri.user .. "@" .. uri.host
-  end
-  return uri.host
+	if uri.user then
+		return uri.user .. "@" .. uri.host
+	end
+	return uri.host
 end
 
 return M

@@ -13,8 +13,8 @@ local M = {}
 ---@param mount_base string Base directory for mounts
 ---@return string local_path
 function M.remote_to_local(uri, mount_base) -- luacheck: ignore 431 (shadows upvalue)
-  local host_dir = M.host_mount_path(uri, mount_base)
-  return host_dir .. uri.path
+	local host_dir = M.host_mount_path(uri, mount_base)
+	return host_dir .. uri.path
 end
 
 ---Get the mount root path for a host.
@@ -22,18 +22,18 @@ end
 ---@param mount_base string
 ---@return string mount_path
 function M.host_mount_path(uri_, mount_base)
-  return mount_base .. "/" .. uri.host_key(uri_)
+	return mount_base .. "/" .. uri.host_key(uri_)
 end
 
 ---Ensure the local directory structure exists for a given path.
 ---@param filepath string Full local file path
 function M.ensure_parent_dir(filepath)
-  local parent = vim.fn.fnamemodify(filepath, ":h")
-  -- Only call mkdir if parent doesn't already exist (avoids NFS I/O errors
-  -- on some fuse implementations where mkdir on existing dirs can fail).
-  if vim.fn.isdirectory(parent) == 0 then
-    vim.fn.mkdir(parent, "p")
-  end
+	local parent = vim.fn.fnamemodify(filepath, ":h")
+	-- Only call mkdir if parent doesn't already exist (avoids NFS I/O errors
+	-- on some fuse implementations where mkdir on existing dirs can fail).
+	if vim.fn.isdirectory(parent) == 0 then
+		vim.fn.mkdir(parent, "p")
+	end
 end
 
 ---Given a local path inside a mount, extract the remote URI components.
@@ -42,20 +42,20 @@ end
 ---@return string|nil host
 ---@return string|nil remote_path
 function M.local_to_remote(local_path, mount_base)
-  -- Normalize mount_base (strip trailing slash)
-  mount_base = mount_base:gsub("/$", "")
-  -- local_path must be inside mount_base
-  local prefix = mount_base .. "/"
-  if not local_path:find(prefix, 1, true) then
-    return nil, nil
-  end
-  local remainder = local_path:sub(#prefix + 1)
-  -- remainder = "hostname/etc/path"
-  local host, remote_path_part = remainder:match("^([^/]+)/(.*)$")
-  if not host then
-    return nil, nil
-  end
-  return host, "/" .. remote_path_part
+	-- Normalize mount_base (strip trailing slash)
+	mount_base = mount_base:gsub("/$", "")
+	-- local_path must be inside mount_base
+	local prefix = mount_base .. "/"
+	if not local_path:find(prefix, 1, true) then
+		return nil, nil
+	end
+	local remainder = local_path:sub(#prefix + 1)
+	-- remainder = "hostname/etc/path"
+	local host, remote_path_part = remainder:match("^([^/]+)/(.*)$")
+	if not host then
+		return nil, nil
+	end
+	return host, "/" .. remote_path_part
 end
 
 return M
