@@ -207,6 +207,7 @@ function M._handle_remote_uri(raw_uri)
     local dir_buf = vim.api.nvim_get_current_buf()
     buffer_hosts[dir_buf] = key
     mount.mark_directory(key)  -- survive until exit, not orphan-unmount
+    if opts.on_open then opts.on_open(local_path, true) end
     local original_cwd = vim.fn.getcwd()
     pcall(vim.fn.chdir, local_path)
     pcall(vim.fn.chdir, original_cwd)
@@ -221,6 +222,7 @@ function M._handle_remote_uri(raw_uri)
     vim.bo[current_buf].modified = false
     vim.api.nvim_buf_set_name(current_buf, local_path)
     buffer_hosts[current_buf] = key
+    if opts.on_open then opts.on_open(local_path, false) end
     vim.api.nvim_buf_call(current_buf, function()
       vim.cmd("filetype detect")
     end)
@@ -230,6 +232,7 @@ function M._handle_remote_uri(raw_uri)
     vim.bo[current_buf].modified = false
     vim.api.nvim_buf_set_name(current_buf, local_path)
     buffer_hosts[current_buf] = key
+    if opts.on_open then opts.on_open(local_path, false) end
   end
 end
 
