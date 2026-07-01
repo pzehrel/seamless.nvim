@@ -154,6 +154,10 @@ require("seamless").setup({
   sshfs_binary = "sshfs",
 
   log_level = "warn",  -- "debug" | "info" | "warn" | "error"
+
+  -- 打开远程文件/目录后的回调。
+  -- 接收 (local_path, is_dir)，用于文件树集成。
+  on_open = nil,
 })
 ```
 

@@ -159,6 +159,10 @@ require("seamless").setup({
   sshfs_binary = "sshfs",
 
   log_level = "warn",  -- "debug" | "info" | "warn" | "error"
+
+  -- Callback after opening a remote file/directory.
+  -- Receives (local_path, is_dir). Use for file-tree integration.
+  on_open = nil,
 })
 ```
 
