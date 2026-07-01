@@ -122,38 +122,46 @@ nvim scp://myserver//home/user/projects/
 
 ```lua
 require("seamless").setup({
+  -- sshfs 挂载点根目录
   mount_base = vim.fn.stdpath("cache") .. "/seamless",
 
+  -- 拦截的协议
   protocols = { "scp", "sftp" },
 
+  -- 自动卸载策略
   unmount = {
     on_exit = true,             -- 退出 Neovim 时卸载全部
     on_idle = nil,              -- 空闲 N 秒后卸载（nil = 禁用）
     on_buffer_orphan = true,    -- 主机最后一个 buffer 关闭时卸载
   },
 
+  -- 传递给 sshfs 的额外参数
   sshfs_args = {
     "-o", "reconnect",
     "-o", "ConnectTimeout=5",
     "-o", "ServerAliveInterval=15",
   },
 
+  -- 通知偏好（使用 vim.notify）
   notify = {
     on_connect = true,          -- 挂载成功时通知
     on_disconnect = false,      -- 卸载时通知（默认关闭，减少噪音）
     on_error = true,            -- 连接失败时通知
   },
 
+  -- SSH 连接设置
   ssh = {
-    binary = "ssh",
-    preflight_check = true,
-    preflight_timeout = 5,
-    force_mount_on_preflight_fail = false,
+    binary = "ssh",                                  -- ssh 二进制路径
+    preflight_check = true,                          -- 挂载前测试连通性
+    preflight_timeout = 5,                           -- preflight 超时（秒）
+    force_mount_on_preflight_fail = false,           -- preflight 失败仍强制挂载
   },
 
+  -- sshfs 二进制路径
   sshfs_binary = "sshfs",
 
-  log_level = "warn",  -- "debug" | "info" | "warn" | "error"
+  -- 日志级别："debug" | "info" | "warn" | "error"
+  log_level = "warn",
 
   -- 打开远程文件/目录后的回调。
   -- 接收 (local_path, is_dir)，用于文件树集成。

@@ -127,38 +127,46 @@ Default configuration with all options:
 
 ```lua
 require("seamless").setup({
+  -- Base directory for sshfs mount points
   mount_base = vim.fn.stdpath("cache") .. "/seamless",
 
+  -- Protocols to intercept
   protocols = { "scp", "sftp" },
 
+  -- Auto-unmount strategies
   unmount = {
     on_exit = true,             -- unmount all on Neovim exit
     on_idle = nil,              -- unmount after N idle seconds (nil = disabled)
     on_buffer_orphan = true,    -- unmount when last buffer for a host closes
   },
 
+  -- Arguments passed directly to sshfs
   sshfs_args = {
     "-o", "reconnect",
     "-o", "ConnectTimeout=5",
     "-o", "ServerAliveInterval=15",
   },
 
+  -- Notification preferences (uses vim.notify)
   notify = {
     on_connect = true,          -- notify on successful mount
     on_disconnect = false,      -- notify on unmount (off by default for less noise)
     on_error = true,            -- notify on connection failure
   },
 
+  -- SSH connection settings
   ssh = {
-    binary = "ssh",
-    preflight_check = true,
-    preflight_timeout = 5,
-    force_mount_on_preflight_fail = false,
+    binary = "ssh",                                  -- path to ssh binary
+    preflight_check = true,                          -- test connectivity before mounting
+    preflight_timeout = 5,                           -- seconds before preflight times out
+    force_mount_on_preflight_fail = false,           -- force mount even if preflight fails
   },
 
+  -- Path to sshfs binary
   sshfs_binary = "sshfs",
 
-  log_level = "warn",  -- "debug" | "info" | "warn" | "error"
+  -- Log level: "debug" | "info" | "warn" | "error"
+  log_level = "warn",
 
   -- Callback after opening a remote file/directory.
   -- Receives (local_path, is_dir). Use for file-tree integration.
