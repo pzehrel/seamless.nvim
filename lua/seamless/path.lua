@@ -12,7 +12,7 @@ local M = {}
 ---@param uri seamless.Uri Parsed URI table
 ---@param mount_base string Base directory for mounts
 ---@return string local_path
-function M.remote_to_local(uri, mount_base)
+function M.remote_to_local(uri, mount_base) -- luacheck: ignore 431 (shadows upvalue)
   local host_dir = M.host_mount_path(uri, mount_base)
   return host_dir .. uri.path
 end

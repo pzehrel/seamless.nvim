@@ -137,7 +137,7 @@ function M.mount(uri)
   -- Preflight check: test key auth quickly.
   local sshpass_cmd = nil
   if config.ssh.preflight_check then
-    local ok, msg = M.preflight(uri)
+    local ok = M.preflight(uri)
     if not ok then
       -- Key auth failed — prompt for password so sshfs can authenticate
       local prompt = "SSH password for "
@@ -154,7 +154,7 @@ function M.mount(uri)
       sshpass_cmd = { "sshpass", "-e", "--" }
       -- Store in SSHPASS env var (safer than -p which leaks in /proc)
       env["SSHPASS"] = pass
-      pass = nil -- clear from Lua memory
+      pass = nil -- luacheck: ignore
     else
       notify.debug("preflight OK for " .. key)
     end
@@ -213,7 +213,7 @@ function M.mount(uri)
           return nil, ""  -- user cancelled, not an error
         end
         env["SSHPASS"] = pass
-        pass = nil
+        pass = nil -- luacheck: ignore
         -- loop back to re-validate with new password
         goto continue
       elseif pw_exit ~= 0 then
