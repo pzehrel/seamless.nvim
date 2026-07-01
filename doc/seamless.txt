@@ -53,11 +53,12 @@ interception window.
 ==============================================================================
 3. USAGE                                                   *seamless-usage*
 
-Open a remote file: >
+Open a remote file or directory: >
     nvim scp://myserver//etc/nginx/nginx.conf
     nvim sftp://user@devbox//var/www/index.html
     nvim scp://myserver:2222//home/user/.bashrc
     nvim scp://192.168.1.100//var/log/syslog
+    nvim scp://myserver//etc/nginx/
 
 The `//` after the hostname indicates an absolute path on the remote.
 seamless.nvim will:
