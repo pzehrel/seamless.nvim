@@ -238,6 +238,12 @@ function M.mount(uri)
     for _, arg in ipairs(config.sshfs_args or {}) do
       table.insert(args, arg)
     end
+    -- macOS creates ._ (Apple Double) files on non-native filesystems.
+    -- noappledouble tells macFUSE to ignore them entirely.
+    if vim.fn.has("mac") == 1 or vim.fn.has("macunix") == 1 then
+      table.insert(args, "-o")
+      table.insert(args, "noappledouble")
+    end
     if uri.port then
       table.insert(args, "-p")
       table.insert(args, uri.port)

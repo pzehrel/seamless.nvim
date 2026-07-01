@@ -202,6 +202,10 @@ seamless.nvim 将所有认证委托给 SSH/sshfs。推荐使用 SSH 密钥获得
 **远程服务器需要安装什么？**
 什么都不需要。sshfs 基于标准 SSH 工作 — 远程服务器只需运行 SSH 服务。
 
+**为什么 macOS 上会出现 `._` 文件？**
+macOS 在非原生文件系统上会创建 Apple Double（`._`）文件存储扩展属性。
+seamless.nvim 自动为 macFUSE 传递 `-o noappledouble` 来禁止生成。
+
 ## 🔌 工作原理
 
 ```

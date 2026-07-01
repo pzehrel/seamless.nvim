@@ -207,6 +207,11 @@ The preflight check catches this and displays clear installation instructions.
 **Is anything installed on the remote server?**
 No. sshfs works over standard SSH — the remote server only needs an SSH daemon.
 
+**Why do I see `._` files on macOS?**
+macOS creates Apple Double (`._`) files for extended attributes on non-native
+filesystems. seamless.nvim automatically passes `-o noappledouble` to macFUSE
+to suppress them.
+
 ## 🔌 How It Works
 
 ```
