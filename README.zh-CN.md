@@ -101,6 +101,12 @@ brew untap macos-fuse-t/cask
 
 > **为什么 `lazy = false`？** 插件通过 `BufReadCmd` autocmd 拦截 `scp://` URI。
 > 如果 autocmd 未在打开 URI 之前注册，netrw 会接管并失败。
+>
+> **⚠️ 推荐禁用 netrw**：seamless.nvim 会在启动时清除 netrw 对 `scp://` 和 `sftp://` 的 handler，但 netrw 与 seamless 之间仍可能存在竞态或其他冲突（如 `BufWriteCmd`）。最干净的做法是在配置中禁用 netrw：
+> ```lua
+> vim.g.loaded_netrw = 1
+> vim.g.loaded_netrwPlugin = 1
+> ```
 
 ## ⚡️ 快速上手
 

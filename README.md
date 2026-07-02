@@ -106,6 +106,12 @@ Using [lazy.nvim](https://github.com/folke/lazy.nvim):
 
 > **Why `lazy = false`?** The plugin intercepts `scp://` URIs via `BufReadCmd` autocmds.
 > If the autocmd isn't registered before the URI is opened, netrw takes over and fails.
+>
+> **⚠️ Disable netrw recommended**: seamless.nvim clears netrw's handlers for `scp://` and `sftp://` at startup, but a race condition or other conflicts (e.g. `BufWriteCmd`) may still arise. The safest approach is to disable netrw entirely in your config:
+> ```lua
+> vim.g.loaded_netrw = 1
+> vim.g.loaded_netrwPlugin = 1
+> ```
 
 ## ⚡️ Quick Start
 
