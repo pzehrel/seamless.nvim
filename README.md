@@ -85,6 +85,8 @@ brew untap macos-fuse-t/cask
 | Debian/Ubuntu | `sudo apt install sshfs` |
 | Arch | `sudo pacman -S sshfs` |
 
+> ⚠️ **Note**: seamless.nvim has only been tested on macOS so far. Linux support has not been thoroughly verified. Linux users are welcome to try it out and [report issues](https://github.com/pzehrel/seamless.nvim/issues)!
+
 ### Plugin
 
 Using [lazy.nvim](https://github.com/folke/lazy.nvim):
