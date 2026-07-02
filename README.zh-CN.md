@@ -183,7 +183,7 @@ require("seamless").setup({
 :checkhealth seamless
 ```
 
-检查项：`ssh`、`sshfs`、卸载工具、`$SSH_AUTH_SOCK`、`~/.ssh/config`、FUSE（macOS: fuse-t，Linux: 内核）、挂载缓存目录、Neovim 版本。
+检查项：`ssh`、`sshfs`、卸载工具、`$SSH_AUTH_SOCK`、`~/.ssh/config`、FUSE（macOS: macFUSE 或 fuse-t，Linux: 内核）、挂载缓存目录、Neovim 版本。
 
 ## ❓ 常见问题
 
@@ -239,14 +239,14 @@ nvim scp://myserver//etc/nginx/nginx.conf
 - Neovim >= 0.9.0
 - [plenary.nvim](https://github.com/nvim-lua/plenary.nvim)
 - `ssh` 客户端
-- `sshfs` 客户端
+- `sshfs` 客户端（macOS 需额外安装 FUSE 实现，见上方[系统依赖](#系统依赖)）
 - 远程服务器：无需安装任何东西（只需 SSH）
 
 ## 🙏 致谢
 
-灵感来自 [remote-sshfs.nvim](https://github.com/nixrajput/remote-sshfs.nvim) 和无数与 netrw 斗争的经历。
+灵感来自 [remote-sshfs.nvim](https://github.com/nosduco/remote-sshfs.nvim) 和无数与 netrw 斗争的经历。
 
-基于 [sshfs/libfuse](https://github.com/libfuse/sshfs) 和 [fuse-t](https://github.com/macos-fuse-t/fuse-t) 构建。
+基于 [sshfs/libfuse](https://github.com/libfuse/sshfs)、[fuse-t](https://github.com/macos-fuse-t/fuse-t) 及其 [sshfs 移植版](https://github.com/macos-fuse-t/sshfs) 构建。
 
 ## 📜 许可证
 
